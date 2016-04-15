@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+{% autoescape true %}
+<html>
+  <head>
+    <link type="text/css" rel="stylesheet" href="/stylesheets/main.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="fixed">
+        <header>Paste your long url here:</header>
+        <form action="{{submit_path}}" method="post">
+          <div><textarea name="url" rows="3" cols="60">{{url}}</textarea></div>
+          <div><input type="submit" value="Shorten URL"></div>
+        </form>
+      </div>
+      <div class="flex-item">
+        {% if short_url or not message %}
+          {% set result = short_url %}
+          <header>Copy the shortened url from here:</header>
+        {% elif message %}
+          {% set result = message %}
+          <br>
+        {% endif %}
+        <textarea name="result" rows="3" cols="60" text readonly>{{result}}</textarea>
+      </div>
+    </div>
+  </body>
+</html>
+{% endautoescape %}

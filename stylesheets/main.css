@@ -1,0 +1,18 @@
+body {
+  font-family: Verdana, Helvetica, sans-serif;
+  background-color: #DDDDDD;
+}
+
+.container{
+  display: flex;
+}
+
+.fixed{
+  flex-grow: 1;
+}
+
+.flex-item{
+  flex-grow: 1;
+}
+
+
