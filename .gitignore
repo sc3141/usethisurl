@@ -8,6 +8,12 @@
 # doesn't work on some systems
 *.*~
 
+# my convenient workflow files
+commit.txt
+
 # by-products of code generation
 *.pyc
+
+# by-products of google appengine runtime execution
+index.yaml
 
