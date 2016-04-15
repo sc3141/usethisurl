@@ -103,7 +103,7 @@ def check_encoding(s):
         if NUMERAL_VALUE[ord(c)] == INVALID_NUMERAL:
             return ValueError(
                 "unexpected character '%s' in encoded id '%s'" % \
-                (s[slen:slen+1].encode('string_escape'), s.encode('string_escape')))
+                (s[slen:slen+1].encode('utf-8').encode('string_escape'), s.encode('utf-8').encode('string_escape')))
 
         slen += 1
         if slen > LEN_ENCODED_MAX_INT:

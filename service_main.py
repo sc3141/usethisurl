@@ -23,7 +23,7 @@ SERVICE_ID = 'shorten'
 SERVICE_PATH = '/' + SERVICE_ID
 SUBMIT_URL_ID = 'submit-url'
 SUBMIT_URL_PATH = '/' + SUBMIT_URL_ID
-MAX_URL_LENGTH = 4
+MAX_URL_LENGTH = 20
 
 RESERVED_SHORT_ID = id_encoding.create_short_id_map(SERVICE_ID, SUBMIT_URL_ID)
 
@@ -42,12 +42,11 @@ class MainPage(webapp2.RequestHandler):
         short_id = self.request.get('short_id')
         if short_id:
             logging.info('got short id: (%s)' % short_id)
+            logging.info('short id class: (%s)' % short_id.__class__)
             problem = id_encoding.check_encoding(short_id)
             if problem:
                 logging.error('PROBLEM: %s' % problem.message)
                 message = problem.message
-                trunc_id = id_encoding.truncate_short_id(short_id)
-                short_url = os.path.join(self.request.path_url, id_encoding.truncate_short_id(short_id))
             else:
                 logging.info('NO PROBLEM')
                 short_url = os.path.join(self.request.path_url, short_id)
@@ -61,7 +60,8 @@ class MainPage(webapp2.RequestHandler):
                     if result:
                         url = result.url
                     else:
-                        message = 'This short url was not found'
+                        message = 'No short url registered to that id'
+                        short_url = ''
         else:
             message = self.request.get('message', '')
             url = self.request.get('url', '')
@@ -78,7 +78,7 @@ class MainPage(webapp2.RequestHandler):
         template = JINJA_ENVIRONMENT.get_template('index.html')
         self.response.write(template.render(template_values))
 
-class SubmitUrl(webapp2.RedirectHandler):
+class SubmitUrl(webapp2.RequestHandler):
 
     def post(self):
         logging.info('UI request(%s)' % self.request)
@@ -105,7 +105,7 @@ class SubmitUrl(webapp2.RedirectHandler):
 
             if result.status_code == httplib.CREATED or \
                 result.status_code == httplib.OK:
-                payload = json.loads(self.request.body)
+                payload = json.loads(result.content)
                 short_id = payload.get('short_id').encode('utf-8')
             elif result.status_code >= httplib.BAD_REQUEST:
                 logging.error("response content: (%s)" % result.content)
