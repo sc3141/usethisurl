@@ -1,11 +1,13 @@
 import os
 import logging
 import urllib
+import urlparse
 import json
 import httplib
 
 from google.appengine.ext import ndb
 from google.appengine.api import urlfetch
+from google.appengine.api.app_identity import app_identity
 
 import jinja2
 import webapp2
@@ -14,21 +16,24 @@ import id_encoding
 import string_util
 import handler_util
 
+HOSTNAME = app_identity.get_default_version_hostname()
+HOSTURL = urlparse.urlunsplit(('http', HOSTNAME, '', '', ''))
+
 JINJA_ENVIRONMENT = jinja2.Environment(
     loader=jinja2.FileSystemLoader(os.path.dirname(__file__)),
     extensions=['jinja2.ext.autoescape'],
     autoescape=True)
 
-SERVICE_ID = 'shorten'
+SERVICE_ID = 'short'
 SERVICE_PATH = '/' + SERVICE_ID
-SUBMIT_URL_ID = 'submit-url'
+SUBMIT_URL_ID = 'ui'
 SUBMIT_URL_PATH = '/' + SUBMIT_URL_ID
-MAX_URL_LENGTH = 20
+MAX_URL_LENGTH = 4096
 
 RESERVED_SHORT_ID = id_encoding.create_short_id_map(SERVICE_ID, SUBMIT_URL_ID)
 
 class ShortUrl(ndb.Model):
-    """A main model for representing an url entry."""
+    """A main model for representing a url entry."""
     short_id= ndb.StringProperty(indexed=True)
     url = ndb.BlobProperty(indexed=False)
     date = ndb.DateTimeProperty(auto_now_add=True)
@@ -38,6 +43,8 @@ class MainPage(webapp2.RequestHandler):
         url = ''
         short_url = ''
         message = ''
+
+        logging.info('HOSTURL %s' % HOSTURL)
 
         short_id = self.request.get('short_id')
         if short_id:
@@ -49,7 +56,7 @@ class MainPage(webapp2.RequestHandler):
                 message = problem.message
             else:
                 logging.info('NO PROBLEM')
-                short_url = os.path.join(self.request.path_url, short_id)
+                short_url = os.path.join(HOSTURL, short_id)
                 id = id_encoding.decode(short_id)
                 if id in RESERVED_SHORT_ID:
                     logging.info('id reserved')
@@ -158,13 +165,14 @@ class ShortenUrl(webapp2.RequestHandler):
             key = short_url.put()
 
             if key:
+                raise ValueError('key.id type: %s' % key.id().__class__)
                 short_id = id_encoding.encode(key.id())
                 logging.info('created short id (%s) for url (%s)' % (short_id, string_util.truncate(url, 128)))
 
                 self.response.set_status(httplib.CREATED)
                 self.response.write(json.dumps( {'short_id': short_id }))
                 self.response.headers.add_header('Content-Type', 'application/json')
-                self.response.headers.add_header('Location', os.path.join(self.request.host_url, short_id))
+                self.response.headers.add_header('Location', os.path.join(HOSTURL, short_id))
             else:
                 message = 'Failed to create short url for url (%s)' % string_util.truncate(url, 128)
                 self.response.set_status(httplib.INSUFFICIENT_STORAGE, message=message)
@@ -180,6 +188,7 @@ class ShortenUrl(webapp2.RequestHandler):
         url = self._extract_post_url()
         if url:
             self._post_url(url)
+
 
 app = webapp2.WSGIApplication([
     ('/', MainPage),
