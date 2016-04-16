@@ -11,7 +11,7 @@ from collections import namedtuple
 NUMERAL = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_"
 NUMERAL_RADIX = len(NUMERAL)
 NUMERAL_PAT = r'[0-9A-z_-]'
-REPEAT_ESCAPE = ('=')
+REPEAT_ESCAPE = '='
 BITS_PER_NUMERAL = 6
 
 NOT_A_NUMERAL = 256
@@ -73,7 +73,7 @@ def encode(id):
 
     while id > 0:
         d = id & 0x3F
-        id = id >> BITS_PER_NUMERAL
+        id >>= BITS_PER_NUMERAL
         encoded[position] = NUMERAL[d]
         position -= 1
 
@@ -191,8 +191,7 @@ def decode(s):
 
                 # countdown is not very pythonic ... but for _ in xrange(count):  ????
                 while count:
-                    d = id & 0x3F
-                    id = id << BITS_PER_NUMERAL
+                    id <<= BITS_PER_NUMERAL
                     id = id | val
                     count -= 1
             else:
@@ -204,8 +203,7 @@ def decode(s):
                 if bit_count > MAX_ID_BITS:
                     raise DecodeError(DECODE_OVERFLOW)
 
-                d = id & 0x3F
-                id = id << BITS_PER_NUMERAL
+                id <<= BITS_PER_NUMERAL
                 id = id | val
 
         if bit_count == MAX_ID_BITS and id > MAX_ID:

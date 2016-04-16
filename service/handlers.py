@@ -6,6 +6,8 @@ import webapp2
 import model
 from model import short_id
 
+from app import HOSTURL
+
 class ShortenUrl(webapp2.RequestHandler):
 
     def _extract_post_url(self):
@@ -44,7 +46,6 @@ class ShortenUrl(webapp2.RequestHandler):
             key = short_url.put()
 
             if key:
-                raise ValueError('key.id type: %s' % key.id().__class__)
                 sid = short_id.encode(key.id())
                 logging.info('created short id (%s) for url (%s)' % (sid, string_util.truncate(url, 128)))
 
