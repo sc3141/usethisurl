@@ -8,12 +8,13 @@ import array
 import re
 from collections import namedtuple
 
-import string_util
-
-NUMERAL = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-"
+NUMERAL = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_"
 NUMERAL_RADIX = len(NUMERAL)
+NUMERAL_PAT = r'[0-9A-z_-]'
+REPEAT_ESCAPE = ('=')
+BITS_PER_NUMERAL = 6
 
-INVALID_NUMERAL = 256
+NOT_A_NUMERAL = 256
 """int: magic value which indicates a character in the character set which does not correspond to a numeral"""
 
 def _initialize_numeral_map(counting):
@@ -29,7 +30,7 @@ def _initialize_numeral_map(counting):
             in the numbering scheme.
     """
 
-    m = array.array('i', itertools.repeat(INVALID_NUMERAL, 256))
+    m = array.array('i', itertools.repeat(NOT_A_NUMERAL, 256))
     for n, c in enumerate(counting):
         m[ord(c)] = n
 
@@ -58,16 +59,21 @@ def encode(id):
     """
     if id < 0:
         raise ValueError("Attempt to encode id using negative number (%d)" % id)
+    elif id > MAX_ID:
+        raise ValueError("Attempt to encode id greater than negative number (%d)" % id)
 
     if id < NUMERAL_RADIX:
         return str(NUMERAL[id])
 
-    position = id.bit_length() / 6
-    encoded = bytearray(position + 1)
+    digits = id.bit_length() / BITS_PER_NUMERAL
+    slack = (id.bit_length() != digits * BITS_PER_NUMERAL)
+    digits += slack
+    encoded = bytearray(digits)
+    position = digits - 1
 
     while id > 0:
         d = id & 0x3F
-        id = id >> 6
+        id = id >> BITS_PER_NUMERAL
         encoded[position] = NUMERAL[d]
         position -= 1
 
@@ -90,139 +96,122 @@ def _compress_repeats(s):
     if repeats:
         as_list = list(s)
         for r in reversed(repeats):
-            as_list[r.start:r.end] = ('=', r.numeral, NUMERAL[r.end - r.start])
+            as_list[r.start:r.end] = (REPEAT_ESCAPE, r.numeral, NUMERAL[r.end - r.start])
 
         return ''.join(as_list)
 
     return s
 
 
-COMPRESSED_REPEAT_PAT = ''.join(( r'(=([', NUMERAL, r'])([', NUMERAL, ']))'))
-COMPRESSED_REPEAT_RE = re.compile(COMPRESSED_REPEAT_PAT)
+MAX_ID_BITS = 256
+MAX_ID = 2 ** MAX_ID_BITS - 1
 
-CompressedRepeat = namedtuple('CompressedRepeat', [ 'start', 'numeral', 'count' ])
+DECODE_INVALID_NUMERAL = -1
+DECODE_INCOMPLETE_REPEAT = -2
+DECODE_INVALID_REPEATED_NUMERAL = -3
+DECODE_INVALID_REPEAT_COUNT_NUMERAL = -4
+DECODE_REPEAT_OVERFLOWS = -5
+DECODE_OVERFLOW = -6
 
-def _expand_repeats(s):
-    repeats = [ CompressedRepeat(m.start(1), m.group(2), m.group(3)) for m in COMPRESSED_REPEAT_RE.finditer(s)]
-    if repeats:
-        as_list = list(s)
-        for r in reversed(repeats):
-            count = NUMERAL_VALUE[ord(r.count)]
-            as_list[r.start:r.start+3] = itertools.repeat(r.numeral, NUMERAL_VALUE[ord(r.count)])
+DECODE_ERROR_REASONS = {
+    DECODE_INVALID_NUMERAL: 'a character which is not a numeral was present in the string',
+    DECODE_INCOMPLETE_REPEAT: 'end of string encountered in repeat sequence (=<val><count>)',
+    DECODE_INVALID_REPEATED_NUMERAL: 'the digit specified to be repeated is not a numeral',
+    DECODE_INVALID_REPEAT_COUNT_NUMERAL: 'the repeat count is not a numeral',
+    DECODE_REPEAT_OVERFLOWS: 'repeat sequence would result in number greater than MAX_ID',
+    DECODE_OVERFLOW: 'decoded id is greater than MAX_ID (too many bits or value)'
+}
 
-        return as_list
-
-    return s
-
-
-
-MAX_ID = 2 ** 256 - 1
-ENCODED_MAX_ID = encode(MAX_ID)
-"""str: string representation of the maximum integer value"""
-
-LEN_ENCODED_MAX_ID = len(ENCODED_MAX_ID)
-"""int: length of said max int encoding"""
-
-LEN_UNCOMPRESSED_MAX_ID = len(_expand_repeats(ENCODED_MAX_ID))
-"""int: length of encoded numbers does not monotonically increase with value. Thus to compare
-magnitudes, lengths of uncompressed ids must be compared."""
-
-MOST_SIGNIFICANT_ENCODED_DIGIT = ENCODED_MAX_ID[0]
-"""chr: numeral of the most significant digit of the max int"""
-
-MAX_VALUE_MS_NUMERAL = NUMERAL_VALUE[ord(MOST_SIGNIFICANT_ENCODED_DIGIT)]
-"""int: the value of the most significant numeral of the max int"""
-
-def check_encoding(s):
+def decode_error_description(code):
     """
-    Indicates by raise of exception that a string is not a valid encoding of an id (integer).
-    Errors of excessive length require iteration over only the first LEN_ENCODED_MAX_INT + 1
-    characters.
-
     Args:
-        s (str): potential encoded id
+        code (int): an error code returned from method, decode
 
     Returns:
-        None: if s represents a valid encoding
-        ValueError: if s does not represent a valid encoding
+        str: a description of the error
 
-    Raises:
-        ValueError: if character which is not a numeral is present or if the resulting value
-            would exceed the value of the maximum integer
     """
+    return DECODE_ERROR_REASONS.get(code, 'unspecified decode error')
 
-    slen = 0
-    for c in _expand_repeats(s):
-        if NUMERAL_VALUE[ord(c)] == INVALID_NUMERAL:
-            return ValueError(
-                "unexpected character '%s' in encoded id '%s'" % \
-                (s[slen:slen+1].encode('utf-8').encode('string_escape'), s.encode('utf-8').encode('string_escape')))
+class DecodeError(StopIteration):
+    """
+    This class provides for a more organized cessation of decoding upon error: the implementation
+    of method, decode, is cleaner
+    """
+    def __init__(self, code):
+        """
+        Args:
+            code (int): code which descrbes the error
 
-        slen += 1
-        if slen > LEN_UNCOMPRESSED_MAX_ID:
-            return ValueError("encoded value exceeds length of maximum (%d)" % LEN_ENCODED_MAX_ID)
-        elif slen == LEN_UNCOMPRESSED_MAX_ID and \
-            NUMERAL_VALUE[ord(s[0])] > MAX_VALUE_MS_NUMERAL:
-            return ValueError("encoded value (%s) exceeds maximum (%d)" % (s, MAX_ID))
+        Returns:
+
+        """
+        super(DecodeError, self).__init__()
+        self.code = code
 
 
 def decode(s):
     """
-    Produces the corresponding integer id from an encoded string. This function does not validate
-    the provided string.  To validate the input, pass the string to the method, validate_encoding.
-    Note that validly encoded ids which correspond  to ids > MAX_ID are properly converted, but
-    speed _may_ markedly degrade.
+    Produces the corresponding integer id from an encoded string.  .
 
     Args:
         s (str): a string which represents a base-64 value according the set of numerals defined
         at the top of this module.
 
     Returns:
-        int: if the corresponding id does not exceed MAX_ID
-        long: if the corresponding id exceeds MAX_ID
+        int: if the corresponding id does not exceed the size of an int
+        long: if the corresponding id exceeds the size of an int
 
     """
+
+    bit_count = 0
     id = 0
-    for c in _expand_repeats(s):
-        val = NUMERAL_VALUE[ord(c)]
-        id = id << 6
-        id = id | val
+
+    try:
+        it = iter(s)
+        for c in it:
+            if c == REPEAT_ESCAPE:
+                try:
+                    repeated = it.next()
+                    count_numeral = it.next()
+                except StopIteration:
+                    raise DecodeError(DECODE_INCOMPLETE_REPEAT)
+
+                val = NUMERAL_VALUE[ord(repeated)]
+                count = NUMERAL_VALUE[ord(count_numeral)]
+                bit_count += (count * BITS_PER_NUMERAL)
+
+                if val == NOT_A_NUMERAL:
+                    raise DecodeError(DECODE_INVALID_REPEATED_NUMERAL)
+                elif count == NOT_A_NUMERAL:
+                    raise DecodeError(DECODE_INVALID_REPEAT_COUNT_NUMERAL)
+                elif bit_count > MAX_ID_BITS:
+                    raise DecodeError(DECODE_REPEAT_OVERFLOWS)
+
+                # countdown is not very pythonic ... but for _ in xrange(count):  ????
+                while count:
+                    d = id & 0x3F
+                    id = id << BITS_PER_NUMERAL
+                    id = id | val
+                    count -= 1
+            else:
+                val = NUMERAL_VALUE[ord(c)]
+                bit_count += BITS_PER_NUMERAL if bit_count else val.bit_length()
+
+                if val == NOT_A_NUMERAL:
+                    raise DecodeError(DECODE_INVALID_NUMERAL)
+                elif bit_count > MAX_ID_BITS:
+                    raise DecodeError(DECODE_OVERFLOW)
+
+                d = id & 0x3F
+                id = id << BITS_PER_NUMERAL
+                id = id | val
+
+        if bit_count == MAX_ID_BITS and id > MAX_ID:
+            raise DecodeError(DECODE_OVERFLOW)
+
+    except DecodeError as e:
+        id = e.code
 
     return id
-
-def create_short_id_map(*args):
-    """
-    Produces a dictionary of shortids which are keyed by id
-
-    Args:
-        *args: an iterable sequence of valid short ids
-
-    Returns:
-        dict: a dictionary of ids each mapped to the corresponding short-id
-
-    """
-    m = dict()
-
-    for v in args:
-        error = check_encoding(v)
-        if isinstance(error, ValueError):
-            raise error
-
-        k = decode(v)
-        m[k] = v
-
-    return m
-
-def truncate_short_id(shortid, num_extras=10):
-    """
-    Truncates a shortid if it is not short enough :) to be valid
-    Args:
-        shortid (string): the short id to potentially truncate
-        num_extras (int): the amount of excess characters to preserve in the truncation
-
-    Returns:
-        string: the truncated short id plus a trailing ellipsis
-
-    """
-    return string_util.truncate(shortid, LEN_ENCODED_MAX_ID + num_extras)
 

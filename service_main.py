@@ -30,6 +30,27 @@ SUBMIT_URL_ID = 'ui'
 SUBMIT_URL_PATH = '/' + SUBMIT_URL_ID
 MAX_URL_LENGTH = 4096
 
+def create_short_id_map(*args):
+    """
+    Produces a dictionary of shortids which are keyed by id
+
+    Args:
+        *args: an iterable sequence of valid short ids
+
+    Returns:
+        dict: a dictionary of ids each mapped to the corresponding short-id
+
+    """
+    m = dict()
+
+    for v in args:
+        k = id_encoding.decode(v)
+        if (k < 0):
+            raise ValueError(id_encoding.decode_error_description(k))
+        m[k] = v
+
+    return m
+
 RESERVED_SHORT_ID = id_encoding.create_short_id_map(SERVICE_ID, SUBMIT_URL_ID)
 
 class ShortUrl(ndb.Model):
@@ -50,14 +71,12 @@ class MainPage(webapp2.RequestHandler):
         if short_id:
             logging.info('got short id: (%s)' % short_id)
             logging.info('short id class: (%s)' % short_id.__class__)
-            problem = id_encoding.check_encoding(short_id)
-            if problem:
-                logging.error('PROBLEM: %s' % problem.message)
-                message = problem.message
+            id = id_encoding.decode(short_id)
+            if id < 0:
+                message = id_encoding.decode_error_description(id)
+                logging.error('PROBLEM: %s' % message)
             else:
-                logging.info('NO PROBLEM')
                 short_url = os.path.join(HOSTURL, short_id)
-                id = id_encoding.decode(short_id)
                 if id in RESERVED_SHORT_ID:
                     logging.info('id reserved')
                     url = short_url
