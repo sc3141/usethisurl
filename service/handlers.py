@@ -1,3 +1,4 @@
+import os
 import logging
 import httplib
 import json
@@ -7,6 +8,8 @@ import model
 from model import short_id
 
 from app import HOSTURL
+from applib import handler, strutil
+
 
 class ShortenUrl(webapp2.RequestHandler):
 
@@ -23,19 +26,19 @@ class ShortenUrl(webapp2.RequestHandler):
             payload = json.loads(self.request.body)
             url = payload.get('url')
             if not url:
-                handler_util.set_status(self.response, httplib.BAD_REQUEST, 'empty url')
+                handler.set_status(self.response, httplib.BAD_REQUEST, 'empty url')
             elif len(url) > model.MAX_URL_LENGTH:
                 message='url exceeds maximum allowed length (%d)' % model.MAX_URL_LENGTH
-                handler_util.set_status(self.response, httplib.REQUEST_ENTITY_TOO_LARGE, message)
+                handler.set_status(self.response, httplib.REQUEST_ENTITY_TOO_LARGE, message)
             else:
                 logging.info('url type %s' % url.__class__)
                 valid_url = url.encode('utf-8')
         except ValueError as e:
-            handler_util.set_status(self.response, httplib.BAD_REQUEST, e.message)
+            handler.set_status(self.response, httplib.BAD_REQUEST, e.message)
         except TypeError as e:
-            handler_util.set_status(self.response, httplib.BAD_REQUEST, e.message)
+            handler.set_status(self.response, httplib.BAD_REQUEST, e.message)
         except StandardError as e:
-            handler_util.set_status(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
+            handler.set_status(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
 
         return valid_url
 
@@ -47,19 +50,19 @@ class ShortenUrl(webapp2.RequestHandler):
 
             if key:
                 sid = short_id.encode(key.id())
-                logging.info('created short id (%s) for url (%s)' % (sid, string_util.truncate(url, 128)))
+                logging.info('created short id (%s) for url (%s)' % (sid, strutil.truncate(url, 128)))
 
                 self.response.set_status(httplib.CREATED)
                 self.response.write(json.dumps( {'short_id': sid }))
                 self.response.headers.add_header('Content-Type', 'application/json')
                 self.response.headers.add_header('Location', os.path.join(HOSTURL, sid))
             else:
-                message = 'Failed to create short url for url (%s)' % string_util.truncate(url, 128)
+                message = 'Failed to create short url for url (%s)' % strutil.truncate(url, 128)
                 self.response.set_status(httplib.INSUFFICIENT_STORAGE, message=message)
                 logging.error(message)
 
         except StandardError as e:
-            handler_util.set_status(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
+            handler.set_status(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
 
     def post(self):
         logging.info('SHORTEN: (%s)' % self.request.body)
