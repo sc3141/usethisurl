@@ -1,14 +1,14 @@
-import os
-import logging
 import httplib
 import json
+import logging
+import os
+
 import webapp2
 
 import model
-from model import short_id
-
 from app import HOSTURL
-from applib import handler, strutil
+from gapplib.lib import handler, strutil
+from model import short_id
 
 
 class ShortenUrl(webapp2.RequestHandler):

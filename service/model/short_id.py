@@ -39,14 +39,14 @@ def _initialize_numeral_map(counting):
 NUMERAL_VALUE = _initialize_numeral_map(NUMERAL)
 """array: a value map of numerals"""
 
-def encode(id):
+def encode(kid):
     """
     Produces a base-64 representation of an integer.  Note that resulting representation is *not*
     the same as that produced by the Standard Library module, :module base64:, as that module pertains to
     encoding/decoding of arbitrary binary strings.  This function represents
 
     Args:
-        id (int): the id of a google datastore key
+        kid (int): the id of a google datastore key, hence (k)ey(id)
 
     Returns:
         str: a string representation of the id in base64 using the numerals identified by
@@ -57,23 +57,23 @@ def encode(id):
         this cost may be sl;ightly offset by a decrease in the cost of decoding.
         Profiling experiments recommended.
     """
-    if id < 0:
-        raise ValueError("Attempt to encode id using negative number (%d)" % id)
-    elif id > MAX_ID:
-        raise ValueError("Attempt to encode id greater than negative number (%d)" % id)
+    if kid < 0:
+        raise ValueError("Attempt to encode id using negative number (%d)" % kid)
+    elif kid > MAX_ID:
+        raise ValueError("Attempt to encode id greater than negative number (%d)" % kid)
 
-    if id < NUMERAL_RADIX:
-        return str(NUMERAL[id])
+    if kid < NUMERAL_RADIX:
+        return str(NUMERAL[kid])
 
-    digits = id.bit_length() / BITS_PER_NUMERAL
-    slack = (id.bit_length() != digits * BITS_PER_NUMERAL)
+    digits = kid.bit_length() / BITS_PER_NUMERAL
+    slack = (kid.bit_length() != digits * BITS_PER_NUMERAL)
     digits += slack
     encoded = bytearray(digits)
     position = digits - 1
 
-    while id > 0:
-        d = id & 0x3F
-        id >>= BITS_PER_NUMERAL
+    while kid > 0:
+        d = kid & 0x3F
+        kid >>= BITS_PER_NUMERAL
         encoded[position] = NUMERAL[d]
         position -= 1
 
@@ -165,7 +165,7 @@ def decode(s):
     """
 
     bit_count = 0
-    id = 0
+    kid = 0
 
     try:
         it = iter(s)
@@ -191,8 +191,8 @@ def decode(s):
 
                 # countdown is not very pythonic ... but for _ in xrange(count):  ????
                 while count:
-                    id <<= BITS_PER_NUMERAL
-                    id = id | val
+                    kid <<= BITS_PER_NUMERAL
+                    kid = kid | val
                     count -= 1
             else:
                 val = NUMERAL_VALUE[ord(c)]
@@ -203,14 +203,14 @@ def decode(s):
                 if bit_count > MAX_ID_BITS:
                     raise DecodeError(DECODE_OVERFLOW)
 
-                id <<= BITS_PER_NUMERAL
-                id = id | val
+                kid <<= BITS_PER_NUMERAL
+                kid = kid | val
 
-        if bit_count == MAX_ID_BITS and id > MAX_ID:
+        if bit_count == MAX_ID_BITS and kid > MAX_ID:
             raise DecodeError(DECODE_OVERFLOW)
 
     except DecodeError as e:
-        id = e.code
+        kid = e.code
 
-    return id
+    return kid
 

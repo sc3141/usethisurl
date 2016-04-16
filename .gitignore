@@ -17,3 +17,5 @@ commit.txt
 # by-products of google appengine runtime execution
 index.yaml
 
+# artifacts of library build
+**/build/
