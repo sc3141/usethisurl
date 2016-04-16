@@ -1,0 +1,13 @@
+runtime: python27
+api_version: 1
+threadsafe: true
+
+# Handlers match in order
+handlers:
+- url: /.*
+  script: app.instance
+
+libraries:
+- name: webapp2
+  version: latest
+

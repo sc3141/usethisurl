@@ -178,14 +178,15 @@ def decode(s):
                     raise DecodeError(DECODE_INCOMPLETE_REPEAT)
 
                 val = NUMERAL_VALUE[ord(repeated)]
-                count = NUMERAL_VALUE[ord(count_numeral)]
-                bit_count += (count * BITS_PER_NUMERAL)
-
                 if val == NOT_A_NUMERAL:
                     raise DecodeError(DECODE_INVALID_REPEATED_NUMERAL)
-                elif count == NOT_A_NUMERAL:
+
+                count = NUMERAL_VALUE[ord(count_numeral)]
+                if count == NOT_A_NUMERAL:
                     raise DecodeError(DECODE_INVALID_REPEAT_COUNT_NUMERAL)
-                elif bit_count > MAX_ID_BITS:
+
+                bit_count += (count * BITS_PER_NUMERAL)
+                if bit_count > MAX_ID_BITS:
                     raise DecodeError(DECODE_REPEAT_OVERFLOWS)
 
                 # countdown is not very pythonic ... but for _ in xrange(count):  ????
@@ -196,11 +197,11 @@ def decode(s):
                     count -= 1
             else:
                 val = NUMERAL_VALUE[ord(c)]
-                bit_count += BITS_PER_NUMERAL if bit_count else val.bit_length()
-
                 if val == NOT_A_NUMERAL:
                     raise DecodeError(DECODE_INVALID_NUMERAL)
-                elif bit_count > MAX_ID_BITS:
+
+                bit_count += BITS_PER_NUMERAL if bit_count else val.bit_length()
+                if bit_count > MAX_ID_BITS:
                     raise DecodeError(DECODE_OVERFLOW)
 
                 d = id & 0x3F
