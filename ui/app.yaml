@@ -8,7 +8,7 @@ handlers:
   static_dir: stylesheets
 
 - url: /.*
-  script: service_main.app
+  script: service_main.instance
 
 libraries:
 - name: webapp2
