@@ -8,7 +8,7 @@ import webapp2
 
 from google.appengine.api import urlfetch
 
-from service_main import HOSTURL, SUBMIT_URL_PATH
+from app import JINJA_ENVIRONMENT, HOSTURL, SUBMIT_URL_PATH
 
 class MainPage(webapp2.RequestHandler):
     def get(self):
