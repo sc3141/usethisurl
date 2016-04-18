@@ -1,5 +1,7 @@
 from google.appengine.ext import ndb
 
+import short_id
+
 MAX_URL_LENGTH = 4096
 
 class ShortUrl(ndb.Model):

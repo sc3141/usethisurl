@@ -2,10 +2,17 @@ runtime: python27
 api_version: 1
 threadsafe: true
 
-# Handlers match in order
+# below, sid == (s)hort(id)
 handlers:
+
+- url: /shorturl/.+$
+  script: app.query
+
+- url: /shorturl
+  script: app.create_or_update
+
 - url: /.*
-  script: app.instance
+  script: app.redirect
 
 libraries:
 - name: webapp2

@@ -1,13 +1,13 @@
-from distutils.core import setup
+from setuptools import setup
 
 setup(
     name='gapplib',
     version='0.1',
-    packages= [''],
-    package_dir={'': ''},
+    packages= ['gapplib'],
+    package_dir={'': 'lib'},
     url='',
     license='',
-    author='steve coulson',
+    author='Steve Coulson',
     author_email='sc3141@xemaps.com',
     description='utility library for google appengine apps'
 )

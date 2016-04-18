@@ -1,16 +1,15 @@
-import urlparse
 import webapp2
 
-from google.appengine.api.app_identity import app_identity
+from handlers import ShortenUrl, QueryUrl, RedirectUrl
 
-from handlers import ShortenUrl
+create_or_update = webapp2.WSGIApplication([
+    ('/shorturl', ShortenUrl),
+], debug=True)
 
-HOSTNAME = app_identity.get_default_version_hostname()
-HOSTURL = urlparse.urlunsplit(('http', HOSTNAME, '', '', ''))
+query = webapp2.WSGIApplication([
+    webapp2.Route('/shorturl/<sid:.+>', handler=QueryUrl, name='query'),
+], debug=True)
 
-SERVICE_ID = 'shorturl'
-SERVICE_PATH = '/' + SERVICE_ID
-
-instance = webapp2.WSGIApplication([
-    (SERVICE_PATH, ShortenUrl),
+redirect = webapp2.WSGIApplication([
+    webapp2.Route('/<sid:.*>', handler=RedirectUrl, name='redirect'),
 ], debug=True)

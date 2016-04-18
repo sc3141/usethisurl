@@ -8,6 +8,8 @@ import array
 import re
 from collections import namedtuple
 
+from gapplib import service
+
 NUMERAL = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_"
 NUMERAL_RADIX = len(NUMERAL)
 NUMERAL_PAT = r'[0-9A-z_-]'
@@ -103,17 +105,21 @@ def _compress_repeats(s):
     return s
 
 
-MAX_ID_BITS = 256
+DATASTORE_BITS = 128 if service.is_production() else 64
+MAX_ID_BITS = DATASTORE_BITS - 1
 MAX_ID = 2 ** MAX_ID_BITS - 1
+MAX_ID_ENCODED = encode(MAX_ID)
 
-DECODE_INVALID_NUMERAL = -1
-DECODE_INCOMPLETE_REPEAT = -2
-DECODE_INVALID_REPEATED_NUMERAL = -3
-DECODE_INVALID_REPEAT_COUNT_NUMERAL = -4
-DECODE_REPEAT_OVERFLOWS = -5
-DECODE_OVERFLOW = -6
+DECODE_ID_TOO_LONG = -1
+DECODE_INVALID_NUMERAL = -2
+DECODE_INCOMPLETE_REPEAT = -3
+DECODE_INVALID_REPEATED_NUMERAL = -4
+DECODE_INVALID_REPEAT_COUNT_NUMERAL = -5
+DECODE_REPEAT_OVERFLOWS = -6
+DECODE_OVERFLOW = -7
 
 DECODE_ERROR_REASONS = {
+    DECODE_ID_TOO_LONG: "id length exceeds maximum (%d) " % len(MAX_ID_ENCODED),
     DECODE_INVALID_NUMERAL: 'a character which is not a numeral was present in the string',
     DECODE_INCOMPLETE_REPEAT: 'end of string encountered in repeat sequence (=<val><count>)',
     DECODE_INVALID_REPEATED_NUMERAL: 'the digit specified to be repeated is not a numeral',
@@ -163,7 +169,6 @@ def decode(s):
         long: if the corresponding id exceeds the size of an int
 
     """
-
     bit_count = 0
     kid = 0
 
@@ -199,7 +204,7 @@ def decode(s):
                 if val == NOT_A_NUMERAL:
                     raise DecodeError(DECODE_INVALID_NUMERAL)
 
-                bit_count += BITS_PER_NUMERAL if bit_count else val.bit_length()
+                bit_count += (BITS_PER_NUMERAL if bit_count else val.bit_length())
                 if bit_count > MAX_ID_BITS:
                     raise DecodeError(DECODE_OVERFLOW)
 
