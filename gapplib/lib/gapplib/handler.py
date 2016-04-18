@@ -3,13 +3,36 @@ Implements useful utilities for use within handlers.
 """
 
 import logging
+import urlparse
+import httplib
+import os
 
-def is_local(request):
-    return request.remote_addr == '127.0.0.1'
+from google.appengine.api.app_identity import app_identity
 
-def set_status(response, code, message):
-    response.set_status(code, message=message)
-    response.out.write(message)
-    logging.error(message)
+from status_templates import GENERIC_STATUS_TEMPLATE,NOT_FOUND_STATUS_TEMPLATE
+
+def host_url():
+    hostname = app_identity.get_default_version_hostname()
+    return urlparse.urlunsplit(('http', hostname, '', '', ''))
+
+def host_path(path):
+    return os.path.join(host_url(), path)
 
 
+def render_error(response, code, message=None):
+    response.set_status(code)
+
+    template = NOT_FOUND_STATUS_TEMPLATE if code == httplib.NOT_FOUND else GENERIC_STATUS_TEMPLATE
+
+    content = template.format(
+        code=code,
+        std_desc=response.http_status_message(code),
+        message=message if message else '')
+
+    response.out.write(content)
+
+def render_and_log_error(response, code, message=None):
+    if message:
+        logging.error("status {code}: {msg}".format(code=code, msg=message))
+
+    render_error(response, code, message)
