@@ -1,3 +1,6 @@
+application: yytakehome
+module: ui
+version: v1
 runtime: python27
 api_version: 1
 threadsafe: true
@@ -5,7 +8,7 @@ threadsafe: true
 # Handlers match in order, put above the default handler.
 handlers:
 - url: /stylesheets
-  static_dir: stylesheets
+  static_dir: content/stylesheets
 
 - url: /.*
   script: app.instance
@@ -16,3 +19,7 @@ libraries:
 - name: jinja2
   version: latest
 
+
+#automatic_scaling:
+#  min_idle_instances: 2
+#  max_pending_latency: 1s

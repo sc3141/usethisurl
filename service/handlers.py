@@ -6,7 +6,6 @@ import os
 import webapp2
 
 import model
-import app
 
 from gapplib import handler, strutil
 
@@ -14,9 +13,12 @@ from gapplib import handler, strutil
 class RedirectUrl(webapp2.RequestHandler):
 
     def get(self, **kwargs):
+        logging.info('############################################')
         sid = kwargs.get('sid', None)
         if not sid:
-            self.response.set_status(200)
+            ui_url = handler.module_url('ui')
+            logging.info("## ui ### %s #####" % ui_url)
+            self.redirect(ui_url)
         else:
             kid = model.short_id.decode(sid)
             if kid < 0:
@@ -33,7 +35,7 @@ class RedirectUrl(webapp2.RequestHandler):
                         logging.error("sid %s: kid %d: not found" % (sid, kid))
                         handler.render_error(self.response, httplib.NOT_FOUND, handler.host_path(sid))
                 except StandardError as e:
-                    handler.render_error(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
+                    handler.render_and_log_error(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
 
 
 class QueryUrl(webapp2.RequestHandler):
@@ -50,23 +52,21 @@ class QueryUrl(webapp2.RequestHandler):
         kid = model.short_id.decode(sid)
         if kid < 0:
             message='%s: %s' % (model.short_id.decode_error_description(kid), sid)
-            handler.render_error(self.response, httplib.BAD_REQUEST, message=message)
-            logging.error(message)
+            handler.write_and_log_error(self.response, httplib.BAD_REQUEST, message=message)
         else:
             try:
                 short_url = model.ShortUrl().get_by_id(kid)
                 if short_url:
                     self.response.set_status(httplib.OK)
-                    self.response.write(json.dumps( {'url': short_url.url }))
+                    self.response.write(json.dumps( {'url': short_url.url, 'short_url': handler.host_path(sid) }))
                     self.response.headers.add_header('Content-Type', 'application/json')
-                    self.response.headers.add_header('Location', handler.host_path(sid))
                     logging.info("query succeeded: sid==%s" % sid)
                 else:
-                    handler.render_error(self.response, httplib.NOT_FOUND, "short id = '%s'" % sid)
-                    logging.info('NOT FOUND: sid==%s' % sid)
+                    message="no corresponding short url: short id '%s'" % sid
+                    handler.write_and_log_error(self.response, httplib.NOT_FOUND, message=message)
 
             except StandardError as e:
-                handler.render_error(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
+                handler.write_and_log_error(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
 
 
 class ShortenUrl(webapp2.RequestHandler):
@@ -91,24 +91,25 @@ class ShortenUrl(webapp2.RequestHandler):
             payload = json.loads(self.request.body)
             url = payload.get('url')
             if not url:
-                handler.render_error(self.response, httplib.BAD_REQUEST, 'empty url')
+                handler.write_and_log_error(self.response, httplib.BAD_REQUEST, 'empty url')
             elif len(url) > model.MAX_URL_LENGTH:
                 message='url exceeds maximum allowed length (%d)' % model.MAX_URL_LENGTH
-                handler.render_error(self.response, httplib.REQUEST_ENTITY_TOO_LARGE, message)
+                handler.write_and_log_error(self.response, httplib.REQUEST_ENTITY_TOO_LARGE, message)
             else:
                 logging.info('url type %s' % url.__class__)
                 valid_url = url.encode('utf-8')
         except ValueError as e:
-            handler.render_error(self.response, httplib.BAD_REQUEST, e.message)
+            handler.write_error(self.response, httplib.BAD_REQUEST, e.message)
         except TypeError as e:
-            handler.render_error(self.response, httplib.BAD_REQUEST, e.message)
+            handler.write_error(self.response, httplib.BAD_REQUEST, e.message)
         except StandardError as e:
-            handler.render_error(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
+            handler.write_and_log_error(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
 
         return valid_url
 
     def _post_url(self, url):
         try:
+
             short_url = model.ShortUrl()
             short_url.url = url
             key = short_url.put()
@@ -123,9 +124,8 @@ class ShortenUrl(webapp2.RequestHandler):
                 self.response.headers.add_header('Location', os.path.join(handler.host_url(), sid))
             else:
                 message = 'Failed to create short url for url (%s)' % strutil.truncate(url, 128)
-                self.response.set_status(httplib.INSUFFICIENT_STORAGE, message=message)
-                logging.error(message)
+                handler.write_and_log_error(self.response, httplib.INSUFFICIENT_STORAGE, message=message)
 
         except StandardError as e:
-            handler.render_error(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
+            handler.write_and_log_error(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
 

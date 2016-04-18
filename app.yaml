@@ -1,3 +1,5 @@
+application: yytakehome
+version: v1
 runtime: python27
 api_version: 1
 threadsafe: true
@@ -6,13 +8,13 @@ threadsafe: true
 handlers:
 
 - url: /shorturl/.+$
-  script: app.query
+  script: service.app.query
 
 - url: /shorturl
-  script: app.create_or_update
+  script: service.app.create_or_update
 
 - url: /.*
-  script: app.redirect
+  script: service.app.redirect
 
 libraries:
 - name: webapp2

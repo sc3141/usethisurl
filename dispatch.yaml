@@ -1,0 +1,8 @@
+dispatch:
+  # Default module serves shortening service.
+  - url: "yytakehome.appspot.com/"
+    module: default
+
+  # Send all mobile traffic to the mobile frontend.
+  - url: "ui.yytakehome.appspot.com/"
+    module: ui
