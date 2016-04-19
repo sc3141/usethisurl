@@ -6,7 +6,7 @@ import os
 import webapp2
 
 import model
-from model.model_error import DecodeError
+from model.model_error import DecodeError, ModelError
 
 from gapplib import handler, strutil
 
@@ -121,7 +121,7 @@ class ShortenUrl(webapp2.RequestHandler):
             else:
                 message = 'Failed to create short url for url (%s)' % strutil.truncate(url, 128)
                 handler.write_and_log_error(self.response, httplib.INSUFFICIENT_STORAGE, message=message)
-
+        except ModelError as e:
+            handler.write_and_log_error(self.response, httplib.BAD_REQUEST, e.message)
         except StandardError as e:
             handler.write_and_log_error(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
-
