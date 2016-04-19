@@ -1,0 +1,165 @@
+from collections import namedtuple
+from itertools import chain
+import urlparse
+
+from google.appengine.ext import ndb
+from google.appengine.api.app_identity import app_identity
+
+from model_error import LongUrlError
+
+MAX_URL_LENGTH = 4096
+
+DEFAULT_URL_SCHEME = 'http'
+DEFAULT_PATH = '/'
+DEFAULT_QUERY = '?'
+
+ALLOWED_SCHEMES = {'http', 'https', 'ftp', 'ftps', 'mailto', 'mms', 'rtmp', 'rtmpt', 'ed2k', 'pop', 'imap', 'nntp',
+                   'news', 'ldap', 'gopher', 'dict', 'dns'}
+
+LOCALHOSTS = {'localhost', '127.0.0.1'}
+
+NormalizedUrl = namedtuple('NormalizedUrl', ['scheme', 'netloc', 'path', 'query'])
+
+class LongUrl(ndb.Model):
+    """
+    Model for reprensenting a long url and its relationship to its short url
+    """
+    query = ndb.StringProperty(indexed=True)
+    short_key = ndb.KeyProperty(kind='ShortUrl')
+
+    @classmethod
+    def construct_parent_key(cls, url):
+        """
+
+        Args:
+            url(str): can be a string or an instance of named tuple,
+               which contains the normalized components of an original url
+
+        Returns:
+            ndb.Key:
+
+        """
+        normal = url
+        if isinstance(normal, str):
+            normal = cls.normalize_long_url(url)
+        return ndb.Key(
+            'UrlScheme', normal.scheme,
+            'UrlNetloc', normal.netloc,
+            'UrlPath', normal.path if normal.path else DEFAULT_PATH)
+
+    @classmethod
+    def construct(cls, url):
+        """
+        Initializes an instance of LongUrl for the purposes of operating on the datastore
+
+        Args:
+            url:
+
+        Returns:
+
+        """
+        normal = url
+        if isinstance(normal, str):
+            normal = cls.normalize_long_url(url)
+        lu = LongUrl(
+            parent=cls.construct_parent_key(normal),
+            id = normal.query if normal.query else DEFAULT_QUERY)
+        return lu
+
+    @classmethod
+    def get_by_url(cls, url):
+        """
+        Initializes an instance of LongUrl for the purposes of operating on the datastore
+
+        Args:
+            url:
+
+        Returns:
+
+        """
+        normal = url
+        if isinstance(normal, str):
+            normal = cls.normalize_long_url(url)
+        return LongUrl.get_by_id(
+            parent=cls.construct_parent_key(normal),
+            id = normal.query if normal.query else DEFAULT_QUERY)
+
+
+    @classmethod
+    def normalize_long_url(cls, val):
+        """
+        Coerces url to standard allowable form, stripping fragment and rejecting certain conditions
+        which are not allowed due to such things as ambiguous destinations or security considerations.
+
+        Validates/Coerces a proposed url based upon the constraints of model which are:
+
+           Scheme:
+              If url has not scheme, it is assigned 'http'. Certain scehes are not allowed. In particular, data:
+              and javascript:.
+
+           Host:
+              references to local machine are not allowed in production mode. Thus the model will
+              disallow 'localhost', '127.0.0.1'. Relative urls (i.e. empty host) are also not allowed.
+
+        Args:
+            val:
+
+        Returns:
+            urlparse.SplitResult
+
+        Raises:
+            ModelConstraintError if and constraints regarding long urls are violated
+        """
+
+        if len(val) > MAX_URL_LENGTH:
+            raise LongUrlError(LongUrlError.URL_TOO_LONG)
+
+        original = urlparse.urlsplit(val)
+        if not original.netloc:
+            if val.startswith(original.scheme):
+                raise LongUrlError(LongUrlError.RELATIVE_URL_NOT_ALLOWED)
+            else:
+                raise LongUrlError(LongUrlError.HOST_OMITTED)
+
+        if not original.hostname or original.hostname in LOCALHOSTS:
+            raise LongUrlError(LongUrlError.LOCALHOST_NOT_ALLOWED)
+        elif -1 != original.hostname.find(app_identity.get_default_version_hostname()):
+            raise LongUrlError(LongUrlError.RECURSIVE_REDIRECTION_ALLOWED)
+
+        if original.scheme:
+            if original.scheme not in ALLOWED_SCHEMES:
+                raise LongUrlError(LongUrlError.SCHEME_NOT_ALLOWED, original.scheme)
+        coerced_scheme = original.scheme if original.scheme else DEFAULT_URL_SCHEME
+
+        return NormalizedUrl(
+            scheme=coerced_scheme,
+            netloc=original.netloc,
+            path=original.path,
+            query=original.query)
+
+
+def validate_long_url(url_prop, val):
+    """
+    Validator function for use with ndb
+
+    Args:
+        url_prop: the datastore property which will hold the value of the url
+        val: the url to be stored
+
+    Returns:
+        str: if the url was coerced into a normalized form
+        None: if the url was not coerced
+
+    Raises:
+        ModelConstraintError if and constraints regarding long urls are violated
+    """
+    return urlparse.urlunsplit(chain(LongUrl.normalize_long_url(val), (None,)))
+
+
+class ShortUrl(ndb.Model):
+    """A main model for representing a url entry."""
+    short_id= ndb.StringProperty(indexed=True)
+    url = ndb.BlobProperty(indexed=False, validator=validate_long_url)
+    date = ndb.DateTimeProperty(auto_now_add=True)
+
+

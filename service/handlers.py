@@ -2,7 +2,6 @@ import httplib
 import json
 import logging
 import os
-
 import webapp2
 
 import model
@@ -105,10 +104,26 @@ class ShortenUrl(webapp2.RequestHandler):
 
     def _post_url(self, url):
         try:
+            key = None
+            long_url = model.url.LongUrl.get_by_url(url)
+            if long_url:
+                key = long_url.short_key
+                if not key:
+                    handler.write_and_log_error(self.response, httplib.CONFLICT)
+            else:
+                long_url = model.url.LongUrl.construct(url)
+                lk = long_url.put()
+                if lk:
+                    short_url = model.url.ShortUrl()
+                    short_url.url = url
+                    key = short_url.put()
+                    if key:
+                        long_url.short_key = key
 
-            short_url = model.ShortUrl()
-            short_url.url = url
-            key = short_url.put()
+                        # i contemplated making this an async operation, however ...
+                        # ... the first simple test did not work properly ...
+                        # as if the entity was stuck waiting for the write to complete
+                        long_url.put()
 
             if key:
                 sid = model.short_id.encode(key.id())

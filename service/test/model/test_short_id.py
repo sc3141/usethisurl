@@ -60,7 +60,6 @@ class TestDecode(TestCase):
         # then find the numeral which follows the numeral assigned to the most significant digit
         # replace the old numeral
         # then expect error upon validation
-        encoded = '0'
         if short_id.DATASTORE_BITS == 128:
             encoded = 'F________________________________________'
         elif short_id.DATASTORE_BITS == 64:

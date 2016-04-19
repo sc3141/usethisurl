@@ -35,8 +35,6 @@ def main(sdk_path, test_path):
     except ImportError:
         print "Note: unable to import appengine_config."
 
-    from service.model.short_id import encode
-
     # Discover and run tests.
     suite = unittest.loader.TestLoader().discover(test_path)
     unittest.TextTestRunner(verbosity=2).run(suite)
