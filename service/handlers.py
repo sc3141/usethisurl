@@ -6,6 +6,7 @@ import os
 import webapp2
 
 import model
+from model.model_error import DecodeError
 
 from gapplib import handler, strutil
 
@@ -20,22 +21,19 @@ class RedirectUrl(webapp2.RequestHandler):
             logging.info("## ui ### %s #####" % ui_url)
             self.redirect(ui_url)
         else:
-            kid = model.short_id.decode(sid)
-            if kid < 0:
-                message='%s: %s' % (model.short_id.decode_error_description(kid), sid)
-                logging.info("standard?: %s" %self.response.http_status_message(httplib.BAD_REQUEST))
-                handler.render_error(self.response, httplib.BAD_REQUEST, message)
-            else:
-                try:
-                    short_url = model.ShortUrl().get_by_id(kid)
-                    if short_url:
-                        logging.info('sid: redirecting')
-                        self.redirect(short_url.url)
-                    else:
-                        logging.error("sid %s: kid %d: not found" % (sid, kid))
-                        handler.render_error(self.response, httplib.NOT_FOUND, handler.host_path(sid))
-                except StandardError as e:
-                    handler.render_and_log_error(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
+            try:
+                kid = model.short_id.decode(sid)
+                short_url = model.ShortUrl().get_by_id(kid)
+                if short_url:
+                    logging.info('sid: redirecting')
+                    self.redirect(short_url.url)
+                else:
+                    logging.error("sid %s: kid %d: not found" % (sid, kid))
+                    handler.render_error(self.response, httplib.NOT_FOUND, handler.host_path(sid))
+            except DecodeError as e:
+                handler.render_and_log_error(self.response, httplib.BAD_REQUEST, e.message)
+            except StandardError as e:
+                handler.render_and_log_error(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
 
 
 class QueryUrl(webapp2.RequestHandler):
@@ -49,24 +47,22 @@ class QueryUrl(webapp2.RequestHandler):
             self._get_url(sid)
 
     def _get_url(self, sid):
-        kid = model.short_id.decode(sid)
-        if kid < 0:
-            message='%s: %s' % (model.short_id.decode_error_description(kid), sid)
-            handler.write_and_log_error(self.response, httplib.BAD_REQUEST, message=message)
-        else:
-            try:
-                short_url = model.ShortUrl().get_by_id(kid)
-                if short_url:
-                    self.response.set_status(httplib.OK)
-                    self.response.write(json.dumps( {'url': short_url.url, 'short_url': handler.host_path(sid) }))
-                    self.response.headers.add_header('Content-Type', 'application/json')
-                    logging.info("query succeeded: sid==%s" % sid)
-                else:
-                    message="no corresponding short url: short id '%s'" % sid
-                    handler.write_and_log_error(self.response, httplib.NOT_FOUND, message=message)
+        try:
+            kid = model.short_id.decode(sid)
+            short_url = model.ShortUrl().get_by_id(kid)
+            if short_url:
+                self.response.set_status(httplib.OK)
+                self.response.write(json.dumps( {'url': short_url.url, 'short_url': handler.host_path(sid) }))
+                self.response.headers.add_header('Content-Type', 'application/json')
+                logging.info("query succeeded: sid==%s" % sid)
+            else:
+                message="no corresponding short url: short id '%s'" % sid
+                handler.write_and_log_error(self.response, httplib.NOT_FOUND, message=message)
 
-            except StandardError as e:
-                handler.write_and_log_error(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
+        except DecodeError as e:
+            handler.write_and_log_error(self.response, httplib.BAD_REQUEST, message=e.message)
+        except StandardError as e:
+            handler.write_and_log_error(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
 
 
 class ShortenUrl(webapp2.RequestHandler):

@@ -10,6 +10,8 @@ from collections import namedtuple
 
 from gapplib import service
 
+from model_error import DecodeError
+
 NUMERAL = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_"
 NUMERAL_RADIX = len(NUMERAL)
 NUMERAL_PAT = r'[0-9A-z_-]'
@@ -104,57 +106,14 @@ def _compress_repeats(s):
 
     return s
 
-
+# larger key space in production
 DATASTORE_BITS = 128 if service.is_production() else 64
+
+# magnitude part of integer
 MAX_ID_BITS = DATASTORE_BITS - 1
+
+# value with all bits == 1
 MAX_ID = 2 ** MAX_ID_BITS - 1
-MAX_ID_ENCODED = encode(MAX_ID)
-
-DECODE_ID_TOO_LONG = -1
-DECODE_INVALID_NUMERAL = -2
-DECODE_INCOMPLETE_REPEAT = -3
-DECODE_INVALID_REPEATED_NUMERAL = -4
-DECODE_INVALID_REPEAT_COUNT_NUMERAL = -5
-DECODE_REPEAT_OVERFLOWS = -6
-DECODE_OVERFLOW = -7
-
-DECODE_ERROR_REASONS = {
-    DECODE_ID_TOO_LONG: "id length exceeds maximum (%d) " % len(MAX_ID_ENCODED),
-    DECODE_INVALID_NUMERAL: 'a character which is not a numeral was present in the string',
-    DECODE_INCOMPLETE_REPEAT: 'end of string encountered in repeat sequence (=<val><count>)',
-    DECODE_INVALID_REPEATED_NUMERAL: 'the digit specified to be repeated is not a numeral',
-    DECODE_INVALID_REPEAT_COUNT_NUMERAL: 'the repeat count is not a numeral',
-    DECODE_REPEAT_OVERFLOWS: 'repeat sequence would result in number greater than MAX_ID',
-    DECODE_OVERFLOW: 'decoded id is greater than MAX_ID (too many bits or value)'
-}
-
-def decode_error_description(code):
-    """
-    Args:
-        code (int): an error code returned from method, decode
-
-    Returns:
-        str: a description of the error
-
-    """
-    return DECODE_ERROR_REASONS.get(code, 'unspecified decode error')
-
-class DecodeError(StopIteration):
-    """
-    This class provides for a more organized cessation of decoding upon error: the implementation
-    of method, decode, is cleaner
-    """
-    def __init__(self, code):
-        """
-        Args:
-            code (int): code which descrbes the error
-
-        Returns:
-
-        """
-        super(DecodeError, self).__init__()
-        self.code = code
-
 
 def decode(s):
     """
@@ -168,54 +127,52 @@ def decode(s):
         int: if the corresponding id does not exceed the size of an int
         long: if the corresponding id exceeds the size of an int
 
+    Raises:
+        model_error.DecodeError:
     """
     bit_count = 0
     kid = 0
 
-    try:
-        it = iter(s)
-        for c in it:
-            if c == REPEAT_ESCAPE:
-                try:
-                    repeated = it.next()
-                    count_numeral = it.next()
-                except StopIteration:
-                    raise DecodeError(DECODE_INCOMPLETE_REPEAT)
+    it = iter(s)
+    for c in it:
+        if c == REPEAT_ESCAPE:
+            try:
+                repeated = it.next()
+                count_numeral = it.next()
+            except StopIteration:
+                raise DecodeError(DecodeError.INCOMPLETE_REPEAT, s)
 
-                val = NUMERAL_VALUE[ord(repeated)]
-                if val == NOT_A_NUMERAL:
-                    raise DecodeError(DECODE_INVALID_REPEATED_NUMERAL)
+            val = NUMERAL_VALUE[ord(repeated)]
+            if val == NOT_A_NUMERAL:
+                raise DecodeError(DecodeError.INVALID_REPEATED_NUMERAL, s)
 
-                count = NUMERAL_VALUE[ord(count_numeral)]
-                if count == NOT_A_NUMERAL:
-                    raise DecodeError(DECODE_INVALID_REPEAT_COUNT_NUMERAL)
+            count = NUMERAL_VALUE[ord(count_numeral)]
+            if count == NOT_A_NUMERAL:
+                raise DecodeError(DecodeError.INVALID_REPEAT_COUNT_NUMERAL, s)
 
-                bit_count += (count * BITS_PER_NUMERAL)
-                if bit_count > MAX_ID_BITS:
-                    raise DecodeError(DECODE_REPEAT_OVERFLOWS)
+            bit_count += (count * BITS_PER_NUMERAL)
+            if bit_count > MAX_ID_BITS:
+                raise DecodeError(DecodeError.REPEAT_OVERFLOWS, s)
 
-                # countdown is not very pythonic ... but for _ in xrange(count):  ????
-                while count:
-                    kid <<= BITS_PER_NUMERAL
-                    kid = kid | val
-                    count -= 1
-            else:
-                val = NUMERAL_VALUE[ord(c)]
-                if val == NOT_A_NUMERAL:
-                    raise DecodeError(DECODE_INVALID_NUMERAL)
-
-                bit_count += (BITS_PER_NUMERAL if bit_count else val.bit_length())
-                if bit_count > MAX_ID_BITS:
-                    raise DecodeError(DECODE_OVERFLOW)
-
+            # countdown is not very pythonic ... but for _ in xrange(count):  ????
+            while count:
                 kid <<= BITS_PER_NUMERAL
                 kid = kid | val
+                count -= 1
+        else:
+            val = NUMERAL_VALUE[ord(c)]
+            if val == NOT_A_NUMERAL:
+                raise DecodeError(DecodeError.INVALID_NUMERAL, s)
 
-        if bit_count == MAX_ID_BITS and kid > MAX_ID:
-            raise DecodeError(DECODE_OVERFLOW)
+            bit_count += (BITS_PER_NUMERAL if bit_count else val.bit_length())
+            if bit_count > MAX_ID_BITS:
+                raise DecodeError(DecodeError.OVERFLOW, " max %d: %s" % (MAX_ID_BITS, s))
 
-    except DecodeError as e:
-        kid = e.code
+            kid <<= BITS_PER_NUMERAL
+            kid = kid | val
+
+    if bit_count == MAX_ID_BITS and kid > MAX_ID:
+        raise DecodeError(DecodeError.OVERFLOW, s)
 
     return kid
 

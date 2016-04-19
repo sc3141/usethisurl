@@ -1,0 +1,55 @@
+"""
+Defines error conditions specifically associated with the (data) model
+"""
+
+class DecodeError(ValueError):
+    """
+    This class provides for a more organized cessation of decoding upon error: the implementation
+    of method, decode, is cleaner
+    """
+
+    ID_TOO_LONG = -1
+    INVALID_NUMERAL = -2
+    INCOMPLETE_REPEAT = -3
+    INVALID_REPEATED_NUMERAL = -4
+    INVALID_REPEAT_COUNT_NUMERAL = -5
+    REPEAT_OVERFLOWS = -6
+    OVERFLOW = -7
+
+    ERROR_REASONS = {
+        ID_TOO_LONG: "id length exceeds maximum",
+        INVALID_NUMERAL: 'a character which is not a numeral was present in the string',
+        INCOMPLETE_REPEAT: 'end of string encountered in repeat sequence (=<val><count>)',
+        INVALID_REPEATED_NUMERAL: 'the digit specified to be repeated is not a numeral',
+        INVALID_REPEAT_COUNT_NUMERAL: 'the repeat count is not a numeral',
+        REPEAT_OVERFLOWS: 'repeat sequence would result in number greater than MAX_ID',
+        OVERFLOW: 'decoded id is greater than MAX_ID (too many bits or value)'
+    }
+
+    @classmethod
+    def generic_description(cls, code):
+        """
+        Args:
+            code (int): an error code returned from method, decode
+
+        Returns:
+            str: a description of the error
+
+        """
+        return cls.ERROR_REASONS.get(code, 'unspecified decode error')
+
+    def __init__(self, code, message = ''):
+        """
+        Args:
+            code (int): code which descrbes the error
+
+        Returns:
+
+        """
+        # if optional arg, message is non-empty, concatenate it
+        super(DecodeError, self).__init__(
+            ': '.join([s for s in (self.generic_description(code), message) if s]))
+        self.code = code
+
+
+
