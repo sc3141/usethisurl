@@ -19,7 +19,11 @@
           <header>Copy the shortened url from here:</header>
         {% elif message %}
           {% set result = message %}
-          <br>
+            {% if url %}
+              <header>We Can't Accept Your URL:</header>
+            {% else %}
+              <br>
+            {% endif %}
         {% endif %}
         <textarea name="result" rows="3" cols="60" text readonly>{{result}}</textarea>
       </div>
