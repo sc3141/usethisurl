@@ -11,20 +11,23 @@ from gapplib import handler, strutil
 
 
 class RedirectUrl(webapp2.RequestHandler):
+    """
+    Issues redirect to destination url
+    """
 
     def get(self, **kwargs):
-        logging.info('############################################')
         sid = kwargs.get('sid', None)
+        # if no short id is specified, redirect to main page of the ui
         if not sid:
             ui_url = handler.module_url('ui')
-            logging.info("## ui ### %s #####" % ui_url)
             self.redirect(ui_url)
         else:
             try:
+                # convert the short_id into an ndb integer id
+                # and retrieve the short url
                 kid = model.short_id.decode(sid)
                 short_url = model.ShortUrl().get_by_id(kid)
                 if short_url:
-                    logging.info('sid: redirecting')
                     self.redirect(short_url.url)
                 else:
                     logging.error("sid %s: kid %d: not found" % (sid, kid))
@@ -36,13 +39,15 @@ class RedirectUrl(webapp2.RequestHandler):
 
 
 class QueryUrl(webapp2.RequestHandler):
+    """
+    Handles requests to get destination url without redirection
+    """
 
     def get(self, **kwargs):
         sid = kwargs.get('sid', None)
         if not sid:
             handler.render_error(self.response, httplib.BAD_REQUEST, 'empty or missing reference to short url')
         else:
-            logging.info("GET on QueryUrl (%s)" % sid)
             self._get_url(sid)
 
     def _get_url(self, sid):
@@ -65,11 +70,12 @@ class QueryUrl(webapp2.RequestHandler):
 
 
 class ShortenUrl(webapp2.RequestHandler):
+    """
+    Creates a short url which corresponsds to a destination url.  If destination url has already
+    been assigned a short url, a reference to the existing is returned.
+    """
 
     def post(self):
-        logging.info('SHORTEN: (%s)' % self.request.body)
-        logging.info('request  (%s)' % self.request)
-
         url = self._extract_post_url()
         if url:
             self._post_url(url)
@@ -91,7 +97,6 @@ class ShortenUrl(webapp2.RequestHandler):
                 message='url exceeds maximum allowed length (%d)' % model.MAX_URL_LENGTH
                 handler.write_and_log_error(self.response, httplib.REQUEST_ENTITY_TOO_LARGE, message)
             else:
-                logging.info('url type %s' % url.__class__)
                 valid_url = url.encode('utf-8')
         except ValueError as e:
             handler.write_error(self.response, httplib.BAD_REQUEST, e.message)
@@ -104,29 +109,31 @@ class ShortenUrl(webapp2.RequestHandler):
 
     def _post_url(self, url):
         try:
-            key = None
-            long_url = model.url.LongUrl.get_by_url(url)
-            if long_url:
-                key = long_url.short_key
-                if not key:
+            short_url_key = None
+            dest_url = model.url.DestinationUrl.get_by_url(url)
+            if dest_url:
+                short_url_key = dest_url.short_key
+                if not short_url_key:
                     handler.write_and_log_error(self.response, httplib.CONFLICT)
             else:
-                long_url = model.url.LongUrl.construct(url)
-                lk = long_url.put()
-                if lk:
+                # a short url has not been created for this destination url - create it
+                dest_url = model.url.DestinationUrl.construct(url)
+                dk = dest_url.put()
+                if dk:
+                    # create a short url and associate it with destination
                     short_url = model.url.ShortUrl()
                     short_url.url = url
-                    key = short_url.put()
-                    if key:
-                        long_url.short_key = key
+                    short_url_key = short_url.put()
+                    if short_url_key:
+                        dest_url.short_key = short_url_key
 
                         # i contemplated making this an async operation, however ...
                         # ... the first simple test did not work properly ...
                         # as if the entity was stuck waiting for the write to complete
-                        long_url.put()
+                        dest_url.put()
 
-            if key:
-                sid = model.short_id.encode(key.id())
+            if short_url_key:
+                sid = model.short_id.encode(short_url_key.id())
                 logging.info('created short id (%s) for url (%s)' % (sid, strutil.truncate(url, 128)))
 
                 self.response.set_status(httplib.CREATED)

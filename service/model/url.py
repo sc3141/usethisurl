@@ -5,9 +5,9 @@ import urlparse
 from google.appengine.ext import ndb
 from google.appengine.api.app_identity import app_identity
 
-from model_error import LongUrlError
+from model_error import DestinationUrlError
 
-MAX_URL_LENGTH = 4096
+MAX_URL_LENGTH = 3000
 
 DEFAULT_URL_SCHEME = 'http'
 DEFAULT_PATH = '/'
@@ -20,9 +20,9 @@ LOCALHOSTS = {'localhost', '127.0.0.1'}
 
 NormalizedUrl = namedtuple('NormalizedUrl', ['scheme', 'netloc', 'path', 'query'])
 
-class LongUrl(ndb.Model):
+class DestinationUrl(ndb.Model):
     """
-    Model for reprensenting a long url and its relationship to its short url
+    Model for reprensenting a destination url and its relationship to its short url
     """
     query = ndb.StringProperty(indexed=True)
     short_key = ndb.KeyProperty(kind='ShortUrl')
@@ -41,7 +41,7 @@ class LongUrl(ndb.Model):
         """
         normal = url
         if isinstance(normal, str):
-            normal = cls.normalize_long_url(url)
+            normal = cls.normalize_dest_url(url)
         return ndb.Key(
             'UrlScheme', normal.scheme,
             'UrlNetloc', normal.netloc,
@@ -60,8 +60,8 @@ class LongUrl(ndb.Model):
         """
         normal = url
         if isinstance(normal, str):
-            normal = cls.normalize_long_url(url)
-        lu = LongUrl(
+            normal = cls.normalize_dest_url(url)
+        lu = DestinationUrl(
             parent=cls.construct_parent_key(normal),
             id = normal.query if normal.query else DEFAULT_QUERY)
         return lu
@@ -79,14 +79,14 @@ class LongUrl(ndb.Model):
         """
         normal = url
         if isinstance(normal, str):
-            normal = cls.normalize_long_url(url)
-        return LongUrl.get_by_id(
+            normal = cls.normalize_dest_url(url)
+        return DestinationUrl.get_by_id(
             parent=cls.construct_parent_key(normal),
             id = normal.query if normal.query else DEFAULT_QUERY)
 
 
     @classmethod
-    def normalize_long_url(cls, val):
+    def normalize_dest_url(cls, val):
         """
         Coerces url to standard allowable form, stripping fragment and rejecting certain conditions
         which are not allowed due to such things as ambiguous destinations or security considerations.
@@ -108,27 +108,27 @@ class LongUrl(ndb.Model):
             urlparse.SplitResult
 
         Raises:
-            ModelConstraintError if and constraints regarding long urls are violated
+            ModelConstraintError if and constraints regarding destination urls are violated
         """
 
         if len(val) > MAX_URL_LENGTH:
-            raise LongUrlError(LongUrlError.URL_TOO_LONG)
+            raise DestinationUrlError(DestinationUrlError.URL_TOO_LONG)
 
         original = urlparse.urlsplit(val)
         if not original.netloc:
             if val.startswith(original.scheme):
-                raise LongUrlError(LongUrlError.RELATIVE_URL_NOT_ALLOWED)
+                raise DestinationUrlError(DestinationUrlError.RELATIVE_URL_NOT_ALLOWED)
             else:
-                raise LongUrlError(LongUrlError.HOST_OMITTED)
+                raise DestinationUrlError(DestinationUrlError.HOST_OMITTED)
 
         if not original.hostname or original.hostname in LOCALHOSTS:
-            raise LongUrlError(LongUrlError.LOCALHOST_NOT_ALLOWED)
+            raise DestinationUrlError(DestinationUrlError.LOCALHOST_NOT_ALLOWED)
         elif -1 != original.hostname.find(app_identity.get_default_version_hostname()):
-            raise LongUrlError(LongUrlError.RECURSIVE_REDIRECTION_ALLOWED)
+            raise DestinationUrlError(DestinationUrlError.RECURSIVE_REDIRECTION_ALLOWED)
 
         if original.scheme:
             if original.scheme not in ALLOWED_SCHEMES:
-                raise LongUrlError(LongUrlError.SCHEME_NOT_ALLOWED, original.scheme)
+                raise DestinationUrlError(DestinationUrlError.SCHEME_NOT_ALLOWED, original.scheme)
         coerced_scheme = original.scheme if original.scheme else DEFAULT_URL_SCHEME
 
         return NormalizedUrl(
@@ -138,7 +138,7 @@ class LongUrl(ndb.Model):
             query=original.query)
 
 
-def validate_long_url(url_prop, val):
+def validate_dest_url(url_prop, val):
     """
     Validator function for use with ndb
 
@@ -151,15 +151,15 @@ def validate_long_url(url_prop, val):
         None: if the url was not coerced
 
     Raises:
-        ModelConstraintError if and constraints regarding long urls are violated
+        ModelConstraintError if and constraints regarding destination urls are violated
     """
-    return urlparse.urlunsplit(chain(LongUrl.normalize_long_url(val), (None,)))
+    return urlparse.urlunsplit(chain(DestinationUrl.normalize_dest_url(val), (None,)))
 
 
 class ShortUrl(ndb.Model):
     """A main model for representing a url entry."""
     short_id= ndb.StringProperty(indexed=True)
-    url = ndb.BlobProperty(indexed=False, validator=validate_long_url)
+    url = ndb.BlobProperty(indexed=False, validator=validate_dest_url)
     date = ndb.DateTimeProperty(auto_now_add=True)
 
 

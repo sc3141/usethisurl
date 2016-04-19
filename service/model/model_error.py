@@ -63,7 +63,7 @@ class DecodeError(ModelError):
         OVERFLOW: 'decoded id is greater than MAX_ID (too many bits or value)'
     }
 
-class LongUrlError(ModelError):
+class DestinationUrlError(ModelError):
     """
     Provides mechanism by which constraits of the model are violated.
     """
