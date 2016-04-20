@@ -1,20 +1,21 @@
 from collections import namedtuple
 from itertools import chain
 import urlparse
+import logging
 
 from google.appengine.ext import ndb
 from google.appengine.api.app_identity import app_identity
 
 from model_error import DestinationUrlError
 
-MAX_URL_LENGTH = 3000
+MAX_URL_LENGTH = 2048
 
 DEFAULT_URL_SCHEME = 'http'
 DEFAULT_PATH = '/'
 DEFAULT_QUERY = '?'
 
 ALLOWED_SCHEMES = {'http', 'https', 'ftp', 'ftps', 'mailto', 'mms', 'rtmp', 'rtmpt', 'ed2k', 'pop', 'imap', 'nntp',
-                   'news', 'ldap', 'gopher', 'dict', 'dns'}
+                   'news', 'ldap', 'dict', 'dns'}
 
 LOCALHOSTS = {'localhost', '127.0.0.1'}
 
@@ -28,24 +29,21 @@ class DestinationUrl(ndb.Model):
     short_key = ndb.KeyProperty(kind='ShortUrl')
 
     @classmethod
-    def construct_parent_key(cls, url):
+    def _construct_parent_key(cls, normalized_url_parts):
         """
 
         Args:
-            url(str): can be a string or an instance of named tuple,
-               which contains the normalized components of an original url
+            normalized_url_parts(NormalizedUrl): a parsed representation of the original url
+               which contains normalized components of an original url
 
         Returns:
             ndb.Key:
 
         """
-        normal = url
-        if isinstance(normal, str):
-            normal = cls.normalize_dest_url(url)
         return ndb.Key(
-            'UrlScheme', normal.scheme,
-            'UrlNetloc', normal.netloc,
-            'UrlPath', normal.path if normal.path else DEFAULT_PATH)
+            'UrlScheme', normalized_url_parts.scheme,
+            'UrlNetloc', normalized_url_parts.netloc,
+            'UrlPath', normalized_url_parts.path if normalized_url_parts.path else DEFAULT_PATH)
 
     @classmethod
     def construct(cls, url):
@@ -58,11 +56,9 @@ class DestinationUrl(ndb.Model):
         Returns:
 
         """
-        normal = url
-        if isinstance(normal, str):
-            normal = cls.normalize_dest_url(url)
+        normal = cls.normalize_dest_url(url)
         lu = DestinationUrl(
-            parent=cls.construct_parent_key(normal),
+            parent=cls._construct_parent_key(normal),
             id = normal.query if normal.query else DEFAULT_QUERY)
         return lu
 
@@ -77,11 +73,9 @@ class DestinationUrl(ndb.Model):
         Returns:
 
         """
-        normal = url
-        if isinstance(normal, str):
-            normal = cls.normalize_dest_url(url)
+        normal = cls.normalize_dest_url(url)
         return DestinationUrl.get_by_id(
-            parent=cls.construct_parent_key(normal),
+            parent=cls._construct_parent_key(normal),
             id = normal.query if normal.query else DEFAULT_QUERY)
 
 
@@ -101,8 +95,11 @@ class DestinationUrl(ndb.Model):
               references to local machine are not allowed in production mode. Thus the model will
               disallow 'localhost', '127.0.0.1'. Relative urls (i.e. empty host) are also not allowed.
 
+        Validation only pertains to logical qualities related to the datamodel. The validation
+        includes checks for neither white space nor valid characters
+
         Args:
-            val:
+            val (str): string representation of a url. string must contain only valid url characters
 
         Returns:
             urlparse.SplitResult
@@ -112,7 +109,7 @@ class DestinationUrl(ndb.Model):
         """
 
         if len(val) > MAX_URL_LENGTH:
-            raise DestinationUrlError(DestinationUrlError.URL_TOO_LONG)
+            raise DestinationUrlError(DestinationUrlError.URL_TOO_LONG, max_len=MAX_URL_LENGTH)
 
         original = urlparse.urlsplit(val)
         if not original.netloc:

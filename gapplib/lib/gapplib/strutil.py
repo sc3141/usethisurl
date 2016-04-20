@@ -1,6 +1,6 @@
 
 
-def truncate(s, limit):
+def ellipsicate(s, limit):
     """
     Truncates a s if it is not short enough
     Args:

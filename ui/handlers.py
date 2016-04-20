@@ -48,7 +48,7 @@ class SubmitUrl(webapp2.RequestHandler):
         short_id = ''
         message = ''
 
-        dest_url = self.request.get('url')
+        dest_url = self.request.get('url').strip()
         if dest_url:
             logging.info('UI request to shorten (%s)' % dest_url)
 

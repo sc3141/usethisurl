@@ -23,7 +23,7 @@ class ModelError(ValueError):
         """
         return cls.ERROR_REASONS.get(code, cls.default_reason)
 
-    def __init__(self, code, message = ''):
+    def __init__(self, code, message = '', **kwargs):
         """
         Args:
             code (int): code which descrbes the error
@@ -32,8 +32,8 @@ class ModelError(ValueError):
 
         """
         # if optional arg, message is non-empty, concatenate it
-        super(ModelError, self).__init__(
-            ': '.join([s for s in (self.generic_description(code), message) if s]))
+        message =  ': '.join([s for s in (self.generic_description(code), message) if s])
+        super(ModelError, self).__init__(message.format(**kwargs) if kwargs else message)
         self.code = code
 
 
@@ -54,7 +54,7 @@ class DecodeError(ModelError):
     OVERFLOW = -7
 
     ERROR_REASONS = {
-        ID_TOO_LONG: "id length exceeds maximum",
+        ID_TOO_LONG: "id length exceeds maximum {max_len}",
         INVALID_NUMERAL: 'a character which is not a numeral was present in the string',
         INCOMPLETE_REPEAT: 'end of string encountered in repeat sequence (=<val><count>)',
         INVALID_REPEATED_NUMERAL: 'the digit specified to be repeated is not a numeral',
@@ -76,7 +76,7 @@ class DestinationUrlError(ModelError):
     RECURSIVE_REDIRECTION_ALLOWED = -6
 
     ERROR_REASONS = {
-        URL_TOO_LONG: "url exceeds maximum allow length",
+        URL_TOO_LONG: "url exceeds maximum allowed length {max_len}",
         SCHEME_NOT_ALLOWED: "url specifies an unsupported protocol",
         RELATIVE_URL_NOT_ALLOWED: "relative urls are not supported. missing //",
         HOST_OMITTED: "implication of localhost by omission of host is not allowed",

@@ -7,7 +7,7 @@ import webapp2
 import model
 from model.model_error import DecodeError, ModelError
 
-from gapplib import handler, strutil
+from gapplib import handler, strutil, urlutil
 
 
 class RedirectUrl(webapp2.RequestHandler):
@@ -91,13 +91,17 @@ class ShortenUrl(webapp2.RequestHandler):
         try:
             payload = json.loads(self.request.body)
             url = payload.get('url')
+            logging.info("post url: (%s): type (%s)" % (url, url.__class__))
             if not url:
                 handler.write_and_log_error(self.response, httplib.BAD_REQUEST, 'empty url')
-            elif len(url) > model.MAX_URL_LENGTH:
-                message='url exceeds maximum allowed length (%d)' % model.MAX_URL_LENGTH
-                handler.write_and_log_error(self.response, httplib.REQUEST_ENTITY_TOO_LARGE, message)
             else:
-                valid_url = url.encode('utf-8')
+                ascii_url = url.encode('ascii')
+                urlutil.validate_url(ascii_url)
+                valid_url = ascii_url
+        except UnicodeDecodeError as e:
+            message = 'found unconvertible unicode character {\\x{:0>04X}} in url at offset {:d}: {url:.{trunc}<HERE>}'.format(
+                ord(url[e.start]), e.start, url=url, trunc=e.start)
+            handler.write_error(self.response, httplib.BAD_REQUEST, message)
         except ValueError as e:
             handler.write_error(self.response, httplib.BAD_REQUEST, e.message)
         except TypeError as e:
@@ -134,14 +138,14 @@ class ShortenUrl(webapp2.RequestHandler):
 
             if short_url_key:
                 sid = model.short_id.encode(short_url_key.id())
-                logging.info('created short id (%s) for url (%s)' % (sid, strutil.truncate(url, 128)))
+                logging.info('created short id (%s) for url (%s)' % (sid, strutil.ellipsicate(url, 128)))
 
                 self.response.set_status(httplib.CREATED)
                 self.response.write(json.dumps( {'short_id': sid }))
                 self.response.headers.add_header('Content-Type', 'application/json')
                 self.response.headers.add_header('Location', os.path.join(handler.host_url(), sid))
             else:
-                message = 'Failed to create short url for url (%s)' % strutil.truncate(url, 128)
+                message = 'Failed to create short url for url (%s)' % strutil.ellipsicate(url, 128)
                 handler.write_and_log_error(self.response, httplib.INSUFFICIENT_STORAGE, message=message)
         except ModelError as e:
             handler.write_and_log_error(self.response, httplib.BAD_REQUEST, e.message)
