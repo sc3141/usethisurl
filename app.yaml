@@ -1,5 +1,5 @@
 application: yytakehome
-version: v1
+version: corton
 runtime: python27
 api_version: 1
 threadsafe: true
