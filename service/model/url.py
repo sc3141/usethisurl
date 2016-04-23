@@ -131,6 +131,16 @@ class DestinationUrl(ndb.Model):
                 raise DestinationUrlError(DestinationUrlError.SCHEME_NOT_ALLOWED, original.scheme)
         coerced_scheme = original.scheme if original.scheme else DEFAULT_URL_SCHEME
 
+        if len(original.netloc) > _MAX_KEYPART_BYTES:
+            raise DestinationUrlError(
+                DestinationUrlError.NETLOC_TOO_LONG, max_len=_MAX_KEYPART_BYTES)
+        elif len(original.path) > _MAX_KEYPART_BYTES:
+            raise DestinationUrlError(
+                DestinationUrlError.PATH_TOO_LONG, max_len=_MAX_KEYPART_BYTES)
+        elif len(original.query) > MAX_QUERY_LENGTH:
+            raise DestinationUrlError(
+                DestinationUrlError.QUERY_TOO_LONG, max_len=MAX_QUERY_LENGTH)
+
         return NormalizedUrl(
             scheme=coerced_scheme,
             netloc=original.netloc,

@@ -71,14 +71,20 @@ class DestinationUrlError(ModelError):
     """
 
     URL_TOO_LONG = -1
-    SCHEME_NOT_ALLOWED = -2
-    RELATIVE_URL_NOT_ALLOWED = -3
-    HOST_OMITTED = -4
-    LOCALHOST_NOT_ALLOWED = -5
-    RECURSIVE_REDIRECTION_ALLOWED = -6
+    NETLOC_TOO_LONG = -2
+    PATH_TOO_LONG = -3
+    QUERY_TOO_LONG = -4
+    SCHEME_NOT_ALLOWED = -5
+    RELATIVE_URL_NOT_ALLOWED = -6
+    HOST_OMITTED = -7
+    LOCALHOST_NOT_ALLOWED = -8
+    RECURSIVE_REDIRECTION_ALLOWED = -9
 
     ERROR_REASONS = {
-        URL_TOO_LONG: "url exceeds maximum allowed length {max_len}",
+        URL_TOO_LONG: "url exceeds maximum allowed length {max_len}" ,
+        NETLOC_TOO_LONG: "netloc (authority/hostname) exceeds maximum supported length {max_len}",
+        PATH_TOO_LONG: "path exceeds maximum supported length {max_len}",
+        QUERY_TOO_LONG: "query exceeds maximum supported length {max_len}",
         SCHEME_NOT_ALLOWED: "url specifies an unsupported protocol",
         RELATIVE_URL_NOT_ALLOWED: "relative urls are not supported. missing //",
         HOST_OMITTED: "implication of localhost by omission of host is not allowed",
