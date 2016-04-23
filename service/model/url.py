@@ -1,25 +1,44 @@
-from collections import namedtuple
 from itertools import chain
 import urlparse
-import logging
 
 from google.appengine.ext import ndb
+from google.appengine.ext.ndb.key import _MAX_KEYPART_BYTES
+
 from google.appengine.api.app_identity import app_identity
 
+from gapplib import strutil
 from model_error import DestinationUrlError
 
 MAX_URL_LENGTH = 2048
+QUERY_CHUNKS = 4
+MAX_QUERY_LENGTH = QUERY_CHUNKS * _MAX_KEYPART_BYTES
 
 DEFAULT_URL_SCHEME = 'http'
 DEFAULT_PATH = '/'
-DEFAULT_QUERY = '?'
+DEFAULT_QUERY = '#'
 
 ALLOWED_SCHEMES = {'http', 'https', 'ftp', 'ftps', 'mailto', 'mms', 'rtmp', 'rtmpt', 'ed2k', 'pop', 'imap', 'nntp',
                    'news', 'ldap', 'dict', 'dns'}
 
 LOCALHOSTS = {'localhost', '127.0.0.1'}
 
-NormalizedUrl = namedtuple('NormalizedUrl', ['scheme', 'netloc', 'path', 'query'])
+
+class NormalizedUrl(urlparse.SplitResult):
+
+    def __new__(cls, scheme=None, netloc=None, path=None, query=None):
+        return super(NormalizedUrl, cls).__new__(cls, scheme, netloc, path, query, None)
+
+    def __init__(self, scheme=None, netloc=None, path=None, query=None):
+        super(NormalizedUrl, self).__init__(scheme, netloc, path, query, None)
+
+    def query_segments(self):
+        # key empty query on '?'
+        if not self.query:
+            yield DEFAULT_QUERY
+        else:
+            for chunk in strutil.chunk(self.query, _MAX_KEYPART_BYTES):
+                yield chunk
+
 
 class DestinationUrl(ndb.Model):
     """
@@ -27,23 +46,6 @@ class DestinationUrl(ndb.Model):
     """
     query = ndb.StringProperty(indexed=True)
     short_key = ndb.KeyProperty(kind='ShortUrl')
-
-    @classmethod
-    def _construct_parent_key(cls, normalized_url_parts):
-        """
-
-        Args:
-            normalized_url_parts(NormalizedUrl): a parsed representation of the original url
-               which contains normalized components of an original url
-
-        Returns:
-            ndb.Key:
-
-        """
-        return ndb.Key(
-            'UrlScheme', normalized_url_parts.scheme,
-            'UrlNetloc', normalized_url_parts.netloc,
-            'UrlPath', normalized_url_parts.path if normalized_url_parts.path else DEFAULT_PATH)
 
     @classmethod
     def construct(cls, url):
@@ -56,11 +58,15 @@ class DestinationUrl(ndb.Model):
         Returns:
 
         """
-        normal = cls.normalize_dest_url(url)
-        lu = DestinationUrl(
-            parent=cls._construct_parent_key(normal),
-            id = normal.query if normal.query else DEFAULT_QUERY)
-        return lu
+        # normalize url
+        normal = cls.normalize_url(url)
+
+        # construct a key for the kind in the hierarchy which corresponds to url
+        kee = cls._construct_key(normal)
+
+        # construct a model
+        du = DestinationUrl(key=kee)
+        return du
 
     @classmethod
     def get_by_url(cls, url):
@@ -73,14 +79,11 @@ class DestinationUrl(ndb.Model):
         Returns:
 
         """
-        normal = cls.normalize_dest_url(url)
-        return DestinationUrl.get_by_id(
-            parent=cls._construct_parent_key(normal),
-            id = normal.query if normal.query else DEFAULT_QUERY)
-
+        normal = cls.normalize_url(url)
+        return cls._construct_key(normal).get()
 
     @classmethod
-    def normalize_dest_url(cls, val):
+    def normalize_url(cls, val):
         """
         Coerces url to standard allowable form, stripping fragment and rejecting certain conditions
         which are not allowed due to such things as ambiguous destinations or security considerations.
@@ -132,7 +135,53 @@ class DestinationUrl(ndb.Model):
             scheme=coerced_scheme,
             netloc=original.netloc,
             path=original.path,
-            query=original.query)
+            query=original.query
+        )
+
+    @classmethod
+    def _hierarchy_path(cls, normalized_url):
+        """
+        Generates a list of entity ids which describes a path in the url name space
+        Args:
+            normalized_url(NormalizedUrl): a parsed representation of the original url
+               which contains normalized components of an original url
+
+        Returns:
+
+        """
+        yield 'Scheme'
+        yield normalized_url.scheme
+        yield 'Netloc'
+        yield normalized_url.netloc
+        yield 'Path'
+        yield normalized_url.path if normalized_url.path else DEFAULT_PATH
+
+        seg_count = 0
+        for query_seg in normalized_url.query_segments():
+            yield ''.join([
+                'Query',
+                ''.join(['Ext', str(seg_count) if seg_count else ''])
+            ])
+            yield query_seg
+
+    @classmethod
+    def _construct_key(cls, normalized_url):
+        """
+        Returns ndb key which describes a path to a DestinationUrl in the url 'space' hierarchy.
+        The last path segment of the returned key is always of kind cls.__name__ (i.e. DestinationUrl)
+
+        Args:
+            normalized_url(NormalizedUrl): a parsed representation of the original url
+               which contains normalized components of an original url
+
+        Returns:
+            ndb.Key:
+
+        """
+        path = [arg for arg in cls._hierarchy_path(normalized_url)]
+        path[-2] = cls.__name__
+
+        return ndb.Key(*path)
 
 
 def validate_dest_url(url_prop, val):
@@ -150,12 +199,12 @@ def validate_dest_url(url_prop, val):
     Raises:
         ModelConstraintError if and constraints regarding destination urls are violated
     """
-    return urlparse.urlunsplit(chain(DestinationUrl.normalize_dest_url(val), (None,)))
+    return urlparse.urlunsplit(DestinationUrl.normalize_url(val))
 
 
 class ShortUrl(ndb.Model):
     """A main model for representing a url entry."""
-    short_id= ndb.StringProperty(indexed=True)
+    short_id = ndb.StringProperty(indexed=True)
     url = ndb.BlobProperty(indexed=False, validator=validate_dest_url)
     date = ndb.DateTimeProperty(auto_now_add=True)
 

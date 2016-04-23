@@ -10,6 +10,7 @@ from google.appengine.api import urlfetch
 import app
 from gapplib import handler
 
+
 class MainPage(webapp2.RequestHandler):
     def get(self, **kwargs):
         url = ''
@@ -18,7 +19,7 @@ class MainPage(webapp2.RequestHandler):
 
         short_id = kwargs.get('sid', None)
         if short_id:
-            service_url = handler.module_path('default', [ 'shorturl', short_id ])
+            service_url = handler.module_path('default', ['shorturl', short_id])
 
             result = urlfetch.fetch(service_url, follow_redirects=False)
             if result.status_code == httplib.OK:
@@ -42,6 +43,7 @@ class MainPage(webapp2.RequestHandler):
         template = app.JINJA_ENVIRONMENT.get_template('content/index.html')
         self.response.write(template.render(template_values))
 
+
 class SubmitUrl(webapp2.RequestHandler):
 
     def post(self):
@@ -54,14 +56,15 @@ class SubmitUrl(webapp2.RequestHandler):
 
             # shortening service currently runs as part of same app
             service_url = handler.module_path('default', 'shorturl')
-            result = urlfetch.fetch(service_url,
-                        payload=json.dumps({ 'url': dest_url}),
-                        method=urlfetch.POST,
-                        headers = {'Content-Type': 'application/json'},
-                        follow_redirects=False)
+            result = urlfetch.fetch(
+                service_url,
+                payload=json.dumps({'url': dest_url}),
+                method=urlfetch.POST,
+                headers={'Content-Type': 'application/json'},
+                follow_redirects=False)
 
             if result.status_code == httplib.CREATED or \
-                result.status_code == httplib.OK:
+                    result.status_code == httplib.OK:
                 payload = json.loads(result.content)
                 short_id = payload.get('short_id').encode('utf-8')
                 logging.info("status %d: %s" % (result.status_code, result.content))

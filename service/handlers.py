@@ -35,6 +35,7 @@ class RedirectUrl(webapp2.RequestHandler):
             except DecodeError as e:
                 handler.render_and_log_error(self.response, httplib.BAD_REQUEST, e.message)
             except StandardError as e:
+                logging.exception('service GET %s' % self.request.path)
                 handler.render_and_log_error(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
 
 
@@ -56,16 +57,17 @@ class QueryUrl(webapp2.RequestHandler):
             short_url = model.ShortUrl().get_by_id(kid)
             if short_url:
                 self.response.set_status(httplib.OK)
-                self.response.write(json.dumps( {'url': short_url.url, 'short_url': handler.host_path(sid) }))
+                self.response.write(json.dumps({'url': short_url.url, 'short_url': handler.host_path(sid)}))
                 self.response.headers.add_header('Content-Type', 'application/json')
                 logging.info("query succeeded: sid==%s" % sid)
             else:
-                message="no corresponding short url: short id '%s'" % sid
+                message = "no corresponding short url: short id '%s'" % sid
                 handler.write_and_log_error(self.response, httplib.NOT_FOUND, message=message)
 
         except DecodeError as e:
             handler.write_and_log_error(self.response, httplib.BAD_REQUEST, message=e.message)
         except StandardError as e:
+            logging.exception('service GET %s' % self.request.path)
             handler.write_and_log_error(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
 
 
@@ -86,27 +88,28 @@ class ShortenUrl(webapp2.RequestHandler):
         Returns:
 
         """
+        payload_url = None
         valid_url = None
 
         try:
             payload = json.loads(self.request.body)
-            url = payload.get('url')
-            logging.info("post url: (%s): type (%s)" % (url, url.__class__))
-            if not url:
+            payload_url = payload.get('url')
+            if not payload_url:
                 handler.write_and_log_error(self.response, httplib.BAD_REQUEST, 'empty url')
             else:
-                ascii_url = url.encode('ascii')
+                ascii_url = payload_url.encode('ascii')
                 urlutil.validate_url(ascii_url)
                 valid_url = ascii_url
         except UnicodeDecodeError as e:
-            message = 'found unconvertible unicode character {\\x{:0>04X}} in url at offset {:d}: {url:.{trunc}<HERE>}'.format(
-                ord(url[e.start]), e.start, url=url, trunc=e.start)
+            message = 'unconvertible unicode character {\\x{:0>04X}} in url: offset {:d}: {url:.{trunc}<HERE>}'.format(
+                ord(payload_url[e.start]), e.start, url=payload_url, trunc=e.start)
             handler.write_error(self.response, httplib.BAD_REQUEST, message)
         except ValueError as e:
             handler.write_error(self.response, httplib.BAD_REQUEST, e.message)
         except TypeError as e:
             handler.write_error(self.response, httplib.BAD_REQUEST, e.message)
         except StandardError as e:
+            logging.exception('service POST %s' % self.request.path)
             handler.write_and_log_error(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
 
         return valid_url
@@ -141,7 +144,7 @@ class ShortenUrl(webapp2.RequestHandler):
                 logging.info('created short id (%s) for url (%s)' % (sid, strutil.ellipsicate(url, 128)))
 
                 self.response.set_status(httplib.CREATED)
-                self.response.write(json.dumps( {'short_id': sid }))
+                self.response.write(json.dumps({'short_id': sid}))
                 self.response.headers.add_header('Content-Type', 'application/json')
                 self.response.headers.add_header('Location', os.path.join(handler.host_url(), sid))
             else:
@@ -150,4 +153,5 @@ class ShortenUrl(webapp2.RequestHandler):
         except ModelError as e:
             handler.write_and_log_error(self.response, httplib.BAD_REQUEST, e.message)
         except StandardError as e:
+            logging.exception('service POST %s' % self.request.path)
             handler.write_and_log_error(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)

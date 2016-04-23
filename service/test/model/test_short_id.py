@@ -1,18 +1,17 @@
 from unittest import TestCase
 
+from google.appengine.ext.ndb.key import _MAX_LONG
+
 import service.model.short_id as short_id
 from service.model.model_error import DecodeError
+
 
 class TestEncode(TestCase):
 
     def test_max_int(self):
-        encoded = short_id.encode(short_id.MAX_ID)
-        if short_id.DATASTORE_BITS == 128:
-            self.assertEquals(encoded, 'F=_g')
-        elif short_id.DATASTORE_BITS == 64:
-            self.assertEquals(encoded, '7=_A')
-        else:
-            self.fail("number of bits in a datastore id is not an expected value (64 or 128")
+        encoded = short_id.encode(_MAX_LONG)
+        self.assertEquals(short_id.MAX_ID_BITS, 63)
+        self.assertEquals(encoded, '7=_A')
 
     def test_reject_negative_id(self):
         self.assertRaises(ValueError, short_id.encode, -1)
@@ -24,6 +23,7 @@ class TestEncode(TestCase):
         s = short_id.encode(short_id.NUMERAL_RADIX - 1)
         self.assertEquals(s, short_id.NUMERAL[-1])
 
+
 class TestDecode(TestCase):
 
     def test__zero(self):
@@ -32,8 +32,8 @@ class TestDecode(TestCase):
         self.assertEqual(int, x.__class__)
 
     def test_decode_max_int(self):
-        x = short_id.decode(short_id.encode(short_id.MAX_ID))
-        self.assertEquals(short_id.MAX_ID, x)
+        x = short_id.decode(short_id.encode(_MAX_LONG))
+        self.assertEquals(_MAX_LONG, x)
 
     def test_reject_non_numeral(self):
         for n in xrange(0, 128):
@@ -48,7 +48,7 @@ class TestDecode(TestCase):
                     self.assertEquals(e.code, DecodeError.INVALID_NUMERAL)
 
     def test_reject_number_too_long(self):
-        x = short_id.encode(short_id.MAX_ID) + '0'
+        x = short_id.encode(_MAX_LONG) + '0'
         with self.assertRaises(DecodeError) as cm:
             short_id.decode(x)
         e = cm.exception
@@ -60,9 +60,9 @@ class TestDecode(TestCase):
         # then find the numeral which follows the numeral assigned to the most significant digit
         # replace the old numeral
         # then expect error upon validation
-        if short_id.DATASTORE_BITS == 128:
+        if short_id.MAX_ID_BITS == 128:
             encoded = 'F________________________________________'
-        elif short_id.DATASTORE_BITS == 64:
+        elif short_id.MAX_ID_BITS == 64:
             encoded = '7___________'
         else:
             self.fail("number of bits in a datastore id is not an expected value (64 or 128")
@@ -75,7 +75,7 @@ class TestDecode(TestCase):
             # I'm not sure if this formula will be valid for all values of MAX_ID.
             # It should work for all powers of 2 ** n -1 except where
             # the ms digit of encoded MAX_ID is greatest numeral ('_')
-            replaced_numeral =  short_id.NUMERAL[short_id.NUMERAL_VALUE[ord(encoded[-1])]]
+            replaced_numeral = short_id.NUMERAL[short_id.NUMERAL_VALUE[ord(encoded[-1])]]
             y = short_id.NUMERAL[index + 1] + encoded[1:-1] + replaced_numeral + '0'
             with self.assertRaises(DecodeError) as cm:
                 short_id.decode(y)

@@ -8,9 +8,12 @@ import array
 import re
 from collections import namedtuple
 
-from gapplib import service
+from google.appengine.ext.ndb.key import _MAX_LONG as DATASTORE_MAX_LONG
 
 from model_error import DecodeError
+
+# magnitude part of integer
+MAX_ID_BITS = DATASTORE_MAX_LONG.bit_length()
 
 NUMERAL = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_"
 NUMERAL_RADIX = len(NUMERAL)
@@ -20,6 +23,7 @@ BITS_PER_NUMERAL = 6
 
 NOT_A_NUMERAL = 256
 """int: magic value which indicates a character in the character set which does not correspond to a numeral"""
+
 
 def _initialize_numeral_map(counting):
     """
@@ -43,6 +47,7 @@ def _initialize_numeral_map(counting):
 NUMERAL_VALUE = _initialize_numeral_map(NUMERAL)
 """array: a value map of numerals"""
 
+
 def encode(kid):
     """
     Produces a base-64 representation of an integer.  Note that resulting representation is *not*
@@ -58,12 +63,12 @@ def encode(kid):
     Note:
         There may be an efficient way to compress repetitive numerals. The motivation would be
         to further shorten encoded ids.  There is a cost associated with increased encoding, however
-        this cost may be sl;ightly offset by a decrease in the cost of decoding.
+        this cost may be slightly offset by a decrease in the cost of decoding.
         Profiling experiments recommended.
     """
     if kid < 0:
         raise ValueError("Attempt to encode id using negative number (%d)" % kid)
-    elif kid > MAX_ID:
+    elif kid > DATASTORE_MAX_LONG:
         raise ValueError("Attempt to encode id greater than negative number (%d)" % kid)
 
     if kid < NUMERAL_RADIX:
@@ -88,15 +93,16 @@ REPEAT_PAT = r'((.)\2{3,63})'
 regex pattern for detection of repeated characters in uncompressed encoded id.
 replacement of repetition isn't worthwhile until a numeral is repeated 3 times,
 because the compression requires 3 digits (=nc, n=numeral, c=count).
-the maximium repettition which can be replaced is 63, because that is the value
+the maximum repetition which can be replaced is 63, because that is the value
 of the highest numeral.
 """
 REPEAT_RE = re.compile(REPEAT_PAT)
 
-Repeat = namedtuple('Repeat', [ 'start', 'end', 'numeral' ])
+Repeat = namedtuple('Repeat', ['start', 'end', 'numeral'])
+
 
 def _compress_repeats(s):
-    repeats = [ Repeat(m.start(1), m.end(1), m.group(2)) for m in REPEAT_RE.finditer(s)]
+    repeats = [Repeat(m.start(1), m.end(1), m.group(2)) for m in REPEAT_RE.finditer(s)]
     if repeats:
         as_list = list(s)
         for r in reversed(repeats):
@@ -106,14 +112,6 @@ def _compress_repeats(s):
 
     return s
 
-# larger key space in production
-DATASTORE_BITS = 128 if service.is_production() else 64
-
-# magnitude part of integer
-MAX_ID_BITS = DATASTORE_BITS - 1
-
-# value with all bits == 1
-MAX_ID = 2 ** MAX_ID_BITS - 1
 
 def decode(s):
     """
@@ -171,7 +169,7 @@ def decode(s):
             kid <<= BITS_PER_NUMERAL
             kid = kid | val
 
-    if bit_count == MAX_ID_BITS and kid > MAX_ID:
+    if bit_count == MAX_ID_BITS and kid > DATASTORE_MAX_LONG:
         raise DecodeError(DecodeError.OVERFLOW, s)
 
     return kid

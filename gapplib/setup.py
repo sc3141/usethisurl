@@ -2,8 +2,8 @@ from setuptools import setup
 
 setup(
     name='gapplib',
-    version='0.1',
-    packages= ['gapplib'],
+    version='0.1.1',
+    packages=['gapplib'],
     package_dir={'': 'lib'},
     url='',
     license='',

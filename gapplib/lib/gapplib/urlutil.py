@@ -22,6 +22,7 @@ ALLOWED_RE = re.compile(ALLOWED_PAT)
 DISALLOWED_PAT = ''.join(['[^', _xchar, ']'])
 DISALLOWED_RE = re.compile(DISALLOWED_PAT)
 
+
 def find_unsafe_url_char(s):
     """
     Indicates the presence of an invalid character in a prospective url
@@ -33,6 +34,7 @@ def find_unsafe_url_char(s):
          Returns None if prohibited characters are not present
     """
     return DISALLOWED_RE.search(s)
+
 
 def validate_url(s, allow_fragment=False):
     """
@@ -59,13 +61,14 @@ def validate_url(s, allow_fragment=False):
     if unsafe:
         if unsafe[0] == _fragment:
             if not allow_fragment:
-               message = 'fragment ({}) embedded at position {:d}'.format(unsafe, m.start())
+                message = 'fragment ({}) embedded at position {:d}'.format(unsafe, m.start())
         elif unsafe.isspace():
             message = 'whitespace ({}) embedded at position {:d}'.format(unsafe.encode('string_escape'), m.start())
         elif unsafe in string.printable:
             message = 'unsafe character ({}) embedded at position {:d}'.format(m.group(), m.start())
         else:
-            message = 'control character ({}) embedded at position {:d}'.format(unsafe.encode('string_escape'), m.start())
+            message = 'control character ({}) embedded at position {:d}'.format(
+                unsafe.encode('string_escape'), m.start())
 
     if message:
         raise ValueError(': '.join(('unsafe url', message)))

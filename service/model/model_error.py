@@ -2,6 +2,7 @@
 Defines error conditions specifically associated with the (data) model
 """
 
+
 class ModelError(ValueError):
     """
     This class provides a common implementation/mechanis for more specific classes of errors
@@ -23,7 +24,7 @@ class ModelError(ValueError):
         """
         return cls.ERROR_REASONS.get(code, cls.default_reason)
 
-    def __init__(self, code, message = '', **kwargs):
+    def __init__(self, code, message='', **kwargs):
         """
         Args:
             code (int): code which descrbes the error
@@ -32,7 +33,7 @@ class ModelError(ValueError):
 
         """
         # if optional arg, message is non-empty, concatenate it
-        message =  ': '.join([s for s in (self.generic_description(code), message) if s])
+        message = ': '.join([s for s in (self.generic_description(code), message) if s])
         super(ModelError, self).__init__(message.format(**kwargs) if kwargs else message)
         self.code = code
 
@@ -62,6 +63,7 @@ class DecodeError(ModelError):
         REPEAT_OVERFLOWS: 'repeat sequence would result in number greater than MAX_ID',
         OVERFLOW: 'decoded id is greater than MAX_ID (too many bits or value)'
     }
+
 
 class DestinationUrlError(ModelError):
     """
