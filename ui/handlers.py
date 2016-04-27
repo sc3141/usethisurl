@@ -10,6 +10,8 @@ from google.appengine.api import urlfetch
 import app
 from gapplib import handler
 
+#debug
+from gapplib import urlutil
 
 class MainPage(webapp2.RequestHandler):
     def get(self, **kwargs):
@@ -24,10 +26,10 @@ class MainPage(webapp2.RequestHandler):
             result = urlfetch.fetch(service_url, follow_redirects=False)
             if result.status_code == httplib.OK:
                 payload = json.loads(result.content)
-                url = payload.get('url').encode('utf-8')
-                short_url = payload.get('short_url').encode('utf-8')
+                url = payload.get('iri')
+                short_url = payload.get('short_url')
             elif result.status_code >= httplib.BAD_REQUEST:
-                logging.error("status %d: %s" % (result.status_code, result.content))
+                logging.error(u'status %d: %s' % (result.status_code, result.content))
                 message = result.content
         else:
             message = self.request.get('message', '')
@@ -35,6 +37,7 @@ class MainPage(webapp2.RequestHandler):
 
         template_values = {
             'submit_path': app.SUBMIT_URL_PATH,
+            #debug 'url': url,
             'url': url,
             'short_url': short_url,
             'message': message,
@@ -50,15 +53,15 @@ class SubmitUrl(webapp2.RequestHandler):
         short_id = ''
         message = ''
 
-        dest_url = self.request.get('url').strip()
-        if dest_url:
-            logging.info('UI request to shorten (%s)' % dest_url)
+        dest_iri = self.request.get('url').strip()
+        if dest_iri:
+            logging.info(u'UI request to shorten (%s)' % dest_iri)
 
             # shortening service currently runs as part of same app
             service_url = handler.module_path('default', 'shorturl')
             result = urlfetch.fetch(
                 service_url,
-                payload=json.dumps({'url': dest_url}),
+                payload=json.dumps({'url': dest_iri}),
                 method=urlfetch.POST,
                 headers={'Content-Type': 'application/json'},
                 follow_redirects=False)
@@ -67,9 +70,9 @@ class SubmitUrl(webapp2.RequestHandler):
                     result.status_code == httplib.OK:
                 payload = json.loads(result.content)
                 short_id = payload.get('short_id').encode('utf-8')
-                logging.info("status %d: %s" % (result.status_code, result.content))
+                logging.info(u'status %d: %s' % (result.status_code, result.content))
             elif result.status_code >= httplib.BAD_REQUEST:
-                logging.error("status %d: %s" % (result.status_code, result.content))
+                logging.error(u'status %d: %s' % (result.status_code, result.content))
                 message = result.content
 
         if short_id:
@@ -77,7 +80,6 @@ class SubmitUrl(webapp2.RequestHandler):
         else:
             parms = {
                 'message': message,
-                'url': dest_url
+                'url': dest_iri
             }
             self.redirect('/?' + urllib.urlencode(parms))
-

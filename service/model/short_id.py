@@ -104,11 +104,17 @@ Repeat = namedtuple('Repeat', ['start', 'end', 'numeral'])
 def _compress_repeats(s):
     repeats = [Repeat(m.start(1), m.end(1), m.group(2)) for m in REPEAT_RE.finditer(s)]
     if repeats:
-        as_list = list(s)
-        for r in reversed(repeats):
-            as_list[r.start:r.end] = (REPEAT_ESCAPE, r.numeral, NUMERAL[r.end - r.start])
+        start = 0
+        compressed = []
+        for r in repeats:
+            compressed.append(s[start:r.start])
+            compressed.append('{}{}{}'.format(REPEAT_ESCAPE, r.numeral, NUMERAL[r.end - r.start]))
+            start = r.end
 
-        return ''.join(as_list)
+        if start != len(s):
+            compressed.append(s[start:])
+
+        return ''.join(compressed)
 
     return s
 

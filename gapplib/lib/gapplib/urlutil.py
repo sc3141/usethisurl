@@ -1,26 +1,39 @@
+
 import re
-import string
+import urllib
 
 # from RFC 1738, http://www.ietf.org/rfc/rfc1738.txt
 
-_alpha = r'A-z'
-_digit = r'0-9'
-_extra = r"!*'(),*"
-_safe_without_hyphen = r'$).+'
-_hyphen = '-'
-_safe = r''.join([_safe_without_hyphen, _hyphen])
+_alpha = ur'A-z'
+_digit = ur'0-9'
+_extra = ur"!*'(),*"
+_safe_without_hyphen = ur'$).+'
+_hyphen = ur'-'
+_safe = ur''.join([_safe_without_hyphen, _hyphen])
 _unreserved_without_hyphen = r''.join([_alpha, _digit, _extra, _safe_without_hyphen])
-_unreserved = r''.join([_alpha, _digit, _extra, _safe])
-_reserved = ';/?:@&='
-_escape = '%'
-_xchar = r''.join([_unreserved_without_hyphen, _escape, _reserved, _hyphen])
+_unreserved = ur''.join([_alpha, _digit, _extra, _safe])
+_reserved = ur';/?:@&='
+_escape = ur'%'
+_xchar = ur''.join([_unreserved_without_hyphen, _escape, _reserved, _hyphen])
 
-_fragment = '#'
+_fragment = ur'#'
 
-ALLOWED_PAT = ''.join(['[', _xchar, ']'])
-ALLOWED_RE = re.compile(ALLOWED_PAT)
-DISALLOWED_PAT = ''.join(['[^', _xchar, ']'])
-DISALLOWED_RE = re.compile(DISALLOWED_PAT)
+ALLOWED_PAT = ur''.join([ur'[', _xchar, u']'])
+ALLOWED_RE = re.compile(ALLOWED_PAT, flags=re.UNICODE)
+DISALLOWED_PAT = ur''.join([ur'[^', _xchar, u']'])
+DISALLOWED_RE = re.compile(DISALLOWED_PAT, flags=re.UNICODE)
+
+WHITE_SPACE_PAT = ur'\s'
+WHITE_SPACE_RE = re.compile(WHITE_SPACE_PAT, flags=re.UNICODE)
+
+CONTROL_CODE_PAT=ur'[\u0000-\u001F\u007F-\u009F]'
+CONTROL_CODE_RE=re.compile(CONTROL_CODE_PAT, flags=re.UNICODE)
+
+CONTROL_CODE_OR_WHITESPACE_PAT = ur''.join([
+    WHITE_SPACE_PAT, ur'|', CONTROL_CODE_PAT
+])
+CONTROL_CODE_OR_WHITESPACE_RE = re.compile(CONTROL_CODE_OR_WHITESPACE_PAT, flags=re.UNICODE)
+
 
 
 def find_unsafe_url_char(s):
@@ -36,39 +49,61 @@ def find_unsafe_url_char(s):
     return DISALLOWED_RE.search(s)
 
 
-def validate_url(s, allow_fragment=False):
+NOT_PRINT_ASCII_PAT = ur'[^ -~]+'
+NOT_PRINT_ASCII_RE = re.compile(NOT_PRINT_ASCII_PAT, re.UNICODE)
+
+def quote_non_ascii(s):
     """
-    Performs simplistic validation of a string with respect to a url.
-    The only check made is that the s contains only 'safe' characters per RFC1738
-    If the string is deemed invalid, a ValueError is raised.
+    Returns a unicode in which non-ascii unicode characters have been quoted
 
     Args:
-        s(str): prospective url
-        allow_fragment(bool): suppress errors induced by the presence of a fragment character (#)
+        s(unicode): unicode string to be quoted
 
     Returns:
-        None
+        unicode: a quoted unicode string
 
-    Raises:
-        ValueError.
     """
-    unsafe = ''
-    message = ''
-    m = find_unsafe_url_char(s)
+    start = 0
+    non_ascii = [m for m in NOT_PRINT_ASCII_RE.finditer(s)]
+    if non_ascii:
+        quoted = []
+        for m in non_ascii:
+            quoted.append(s[start:m.start()])
+            quoted.append(urllib.quote(m.group().encode('utf-8')))
+            start = m.end()
+
+        if start != len(s):
+            quoted.append(s[start:])
+
+        return u''.join(quoted).encode('utf-8')
+
+    return s
+
+
+def iri_to_uri(iri):
+
+    uri = iri
+    m = CONTROL_CODE_OR_WHITESPACE_RE.search(uri)
     if m:
-        unsafe = m.group()
-
-    if unsafe:
-        if unsafe[0] == _fragment:
-            if not allow_fragment:
-                message = 'fragment ({}) embedded at position {:d}'.format(unsafe, m.start())
-        elif unsafe.isspace():
-            message = 'whitespace ({}) embedded at position {:d}'.format(unsafe.encode('string_escape'), m.start())
-        elif unsafe in string.printable:
-            message = 'unsafe character ({}) embedded at position {:d}'.format(m.group(), m.start())
+        print u'START: ({})'.format(m.start())
+        if WHITE_SPACE_RE.search(m.group()):
+            raise ValueError(
+               u'whitespace ({}) embedded at position {:d}'.format(
+                   uri.encode('utf-8'), m.start()))
         else:
-            message = 'control character ({}) embedded at position {:d}'.format(
-                unsafe.encode('string_escape'), m.start())
+            print 'TYPE: %s' % uri.__class__.__name__
+            raise ValueError(
+                u'control character ({}) embedded at position {:d}'.format(
+                    uri.encode('unicode_escape'), m.start()))
 
-    if message:
-        raise ValueError(': '.join(('unsafe url', message)))
+    quoted = quote_non_ascii(uri)
+
+    m = find_unsafe_url_char(quoted)
+    if m:
+        raise ValueError(
+            u'unsafe character ({}) embedded at position {:d}'.format(m.group(), m.start()))
+
+    return quoted.encode('ascii')
+
+
+

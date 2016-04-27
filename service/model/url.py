@@ -1,4 +1,3 @@
-from itertools import chain
 import urlparse
 
 from google.appengine.ext import ndb
@@ -7,13 +6,16 @@ from google.appengine.ext.ndb.key import _MAX_KEYPART_BYTES
 from google.appengine.api.app_identity import app_identity
 
 from gapplib import strutil
+from gapplib import urlutil
 from model_error import DestinationUrlError
 
-MAX_URL_LENGTH = 2048
+MAX_IRI_LENGTH = 2048
+"""Maximum allowable length of a url for which shortening has been requested. the url must be an IRI"""
+
 QUERY_CHUNKS = 4
 MAX_QUERY_LENGTH = QUERY_CHUNKS * _MAX_KEYPART_BYTES
 
-DEFAULT_URL_SCHEME = 'http'
+DEFAULT_IRI_SCHEME = 'http'
 DEFAULT_PATH = '/'
 DEFAULT_QUERY = '#'
 
@@ -23,13 +25,13 @@ ALLOWED_SCHEMES = {'http', 'https', 'ftp', 'ftps', 'mailto', 'mms', 'rtmp', 'rtm
 LOCALHOSTS = {'localhost', '127.0.0.1'}
 
 
-class NormalizedUrl(urlparse.SplitResult):
+class NormalizedIri(urlparse.SplitResult):
 
     def __new__(cls, scheme=None, netloc=None, path=None, query=None):
-        return super(NormalizedUrl, cls).__new__(cls, scheme, netloc, path, query, None)
+        return super(NormalizedIri, cls).__new__(cls, scheme, netloc, path, query, None)
 
     def __init__(self, scheme=None, netloc=None, path=None, query=None):
-        super(NormalizedUrl, self).__init__(scheme, netloc, path, query, None)
+        super(NormalizedIri, self).__init__(scheme, netloc, path, query, None)
 
     def query_segments(self):
         # key empty query on '?'
@@ -40,7 +42,7 @@ class NormalizedUrl(urlparse.SplitResult):
                 yield chunk
 
 
-class DestinationUrl(ndb.Model):
+class DestinationIri(ndb.Model):
     """
     Model for reprensenting a destination url and its relationship to its short url
     """
@@ -48,50 +50,50 @@ class DestinationUrl(ndb.Model):
     short_key = ndb.KeyProperty(kind='ShortUrl')
 
     @classmethod
-    def construct(cls, url):
+    def construct(cls, iri):
         """
-        Initializes an instance of LongUrl for the purposes of operating on the datastore
+        Initializes an instance of DetinationIri for the purposes of operating on the datastore
 
         Args:
-            url:
+            iri:
 
         Returns:
 
         """
         # normalize url
-        normal = cls.normalize_url(url)
+        normal = cls.normalize_iri(iri)
 
         # construct a key for the kind in the hierarchy which corresponds to url
         kee = cls._construct_key(normal)
 
         # construct a model
-        du = DestinationUrl(key=kee)
-        return du
+        di = DestinationIri(key=kee)
+        return di
 
     @classmethod
-    def get_by_url(cls, url):
+    def get_by_iri(cls, iri):
         """
-        Initializes an instance of LongUrl for the purposes of operating on the datastore
+        Initializes an instance of DetinationIri for the purposes of operating on the datastore
 
         Args:
-            url:
+            iri:
 
         Returns:
 
         """
-        normal = cls.normalize_url(url)
+        normal = cls.normalize_iri(iri)
         return cls._construct_key(normal).get()
 
     @classmethod
-    def normalize_url(cls, val):
+    def normalize_iri(cls, val):
         """
-        Coerces url to standard allowable form, stripping fragment and rejecting certain conditions
+        Coerces iri to standard allowable form, stripping fragment and rejecting certain conditions
         which are not allowed due to such things as ambiguous destinations or security considerations.
 
-        Validates/Coerces a proposed url based upon the constraints of model which are:
+        Validates/Coerces a proposed iri based upon the constraints of model which are:
 
            Scheme:
-              If url has not scheme, it is assigned 'http'. Certain scehes are not allowed. In particular, data:
+              If iri has not scheme, it is assigned 'http'. Certain scehes are not allowed. In particular, data:
               and javascript:.
 
            Host:
@@ -102,7 +104,8 @@ class DestinationUrl(ndb.Model):
         includes checks for neither white space nor valid characters
 
         Args:
-            val (str): string representation of a url. string must contain only valid url characters
+            val (str): string representation of an (I)nternational(R)esource(I)dentifier.
+               string must contain only valid iri characters
 
         Returns:
             urlparse.SplitResult
@@ -111,8 +114,8 @@ class DestinationUrl(ndb.Model):
             ModelConstraintError if and constraints regarding destination urls are violated
         """
 
-        if len(val) > MAX_URL_LENGTH:
-            raise DestinationUrlError(DestinationUrlError.URL_TOO_LONG, max_len=MAX_URL_LENGTH)
+        if len(val) > MAX_IRI_LENGTH:
+            raise DestinationUrlError(DestinationUrlError.URL_TOO_LONG, max_len=MAX_IRI_LENGTH)
 
         original = urlparse.urlsplit(val)
         if not original.netloc:
@@ -129,7 +132,7 @@ class DestinationUrl(ndb.Model):
         if original.scheme:
             if original.scheme not in ALLOWED_SCHEMES:
                 raise DestinationUrlError(DestinationUrlError.SCHEME_NOT_ALLOWED, original.scheme)
-        coerced_scheme = original.scheme if original.scheme else DEFAULT_URL_SCHEME
+        coerced_scheme = original.scheme if original.scheme else DEFAULT_IRI_SCHEME
 
         if len(original.netloc) > _MAX_KEYPART_BYTES:
             raise DestinationUrlError(
@@ -141,7 +144,7 @@ class DestinationUrl(ndb.Model):
             raise DestinationUrlError(
                 DestinationUrlError.QUERY_TOO_LONG, max_len=MAX_QUERY_LENGTH)
 
-        return NormalizedUrl(
+        return NormalizedIri(
             scheme=coerced_scheme,
             netloc=original.netloc,
             path=original.path,
@@ -149,25 +152,25 @@ class DestinationUrl(ndb.Model):
         )
 
     @classmethod
-    def _hierarchy_path(cls, normalized_url):
+    def _hierarchy_path(cls, normalized_iri):
         """
-        Generates a list of entity ids which describes a path in the url name space
+        Generates a list of entity ids which describes a path in the iri name space
         Args:
-            normalized_url(NormalizedUrl): a parsed representation of the original url
-               which contains normalized components of an original url
+            normalized_iri(NormalizedIri): a parsed representation of the original iri
+               which contains normalized components of an original iri
 
         Returns:
 
         """
         yield 'Scheme'
-        yield normalized_url.scheme
+        yield normalized_iri.scheme
         yield 'Netloc'
-        yield normalized_url.netloc
+        yield normalized_iri.netloc
         yield 'Path'
-        yield normalized_url.path if normalized_url.path else DEFAULT_PATH
+        yield normalized_iri.path if normalized_iri.path else DEFAULT_PATH
 
         seg_count = 0
-        for query_seg in normalized_url.query_segments():
+        for query_seg in normalized_iri.query_segments():
             yield ''.join([
                 'Query',
                 ''.join(['Ext', str(seg_count) if seg_count else ''])
@@ -175,47 +178,71 @@ class DestinationUrl(ndb.Model):
             yield query_seg
 
     @classmethod
-    def _construct_key(cls, normalized_url):
+    def _construct_key(cls, normalized_iri):
         """
-        Returns ndb key which describes a path to a DestinationUrl in the url 'space' hierarchy.
-        The last path segment of the returned key is always of kind cls.__name__ (i.e. DestinationUrl)
+        Returns ndb key which describes a path to a DestinationIri in the iri 'space' hierarchy.
+        The last path segment of the returned key is always of kind cls.__name__ (i.e. DestinationIri)
 
         Args:
-            normalized_url(NormalizedUrl): a parsed representation of the original url
-               which contains normalized components of an original url
+            normalized_iri(NormalizedIri): a parsed representation of the original iri
+               which contains normalized components of an original iri
 
         Returns:
             ndb.Key:
 
         """
-        path = [arg for arg in cls._hierarchy_path(normalized_url)]
+        path = [arg for arg in cls._hierarchy_path(normalized_iri)]
         path[-2] = cls.__name__
 
         return ndb.Key(*path)
 
 
-def validate_dest_url(url_prop, val):
+def validate_dest_iri(iri_prop, val):
     """
     Validator function for use with ndb
 
     Args:
-        url_prop: the datastore property which will hold the value of the url
-        val: the url to be stored
+        iri_prop: the datastore property which will hold the value of the iri
+        val: the iri to be stored
 
     Returns:
-        str: if the url was coerced into a normalized form
-        None: if the url was not coerced
+        unicode: if the iri was coerced into a normalized form
+        None: if the iri was not coerced
 
     Raises:
         ModelConstraintError if and constraints regarding destination urls are violated
     """
-    return urlparse.urlunsplit(DestinationUrl.normalize_url(val))
+    return urlparse.urlunsplit(DestinationIri.normalize_iri(val))
 
+
+class IriProperty(ndb.TextProperty):
+    """
+    Derived property which holds an (I)nternational(R)esource(I)dentifier.
+    Purpose of class is the implicit setting in a given entity of the value
+    of a peer property, url, which is the quoted version of the iri.
+    """
+    def __set__(self, entity, value):
+        """Descriptor protocol: set the value on the entity."""
+
+        super(ndb.TextProperty, self).__set__(entity, value)
+        quoted_iri = urlutil.iri_to_uri(value)
+        entity._values['url'] = quoted_iri
+
+class UrlProperty(ndb.BlobProperty):
+    """
+    Holds a quoted version of an IRI which is suitable for use in the Location header fo
+    an HTTP redirection response.  This class enforces the proscription of direct
+    assignment of a value to this property.
+    """
+    def __set__(self, entity, value):
+        """Descriptor protocol: set the value on the entity."""
+        raise ndb.model.ReadonlyPropertyError(
+            "read-only attribute '{}' is computed from '{}'".format(self._name, 'iri'))
 
 class ShortUrl(ndb.Model):
     """A main model for representing a url entry."""
+
     short_id = ndb.StringProperty(indexed=True)
-    url = ndb.BlobProperty(indexed=False, validator=validate_dest_url)
+    iri = IriProperty(validator=validate_dest_iri)
+    url = UrlProperty()
     date = ndb.DateTimeProperty(auto_now_add=True)
-
-
