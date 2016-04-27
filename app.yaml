@@ -1,11 +1,20 @@
 application: yytakehome
-version: vougeot
+version: gigondas
 runtime: python27
 api_version: 1
 threadsafe: true
 
+builtins:
+- deferred: on
+
 # below, sid == (s)hort(id)
 handlers:
+
+- url: /schema/update/.+$
+  script: service.schema.update.app
+  login: required
+  secure: always
+  auth_fail_action: redirect
 
 - url: /shorturl/.+$
   script: service.app.query
@@ -19,4 +28,8 @@ handlers:
 libraries:
 - name: webapp2
   version: latest
+
+env_variables:
+  ADMINISTRATORS: 'sc3141@gmail.com'
+
 
