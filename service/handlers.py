@@ -150,3 +150,17 @@ class ShortenUrl(webapp2.RequestHandler):
         except StandardError as e:
             logging.exception('service POST %s' % self.request.path)
             handler.write_and_log_error(self.response, httplib.INTERNAL_SERVER_ERROR, e.message)
+
+class Maintenance(webapp2.RequestHandler):
+    """
+    Responds with message regarding 'system down for maintenance'
+    """
+
+    def get(self, *args, **kwargs):
+        self.response.set_status(httplib.SERVICE_UNAVAILABLE, message='')
+        self.response.out.write('System is down for maintenance')
+
+    def post(self, *args, **kwargs):
+        self.response.set_status(httplib.SERVICE_UNAVAILABLE, message='')
+        self.response.out.write('System is down for maintenance')
+

@@ -55,16 +55,14 @@ class DestinationIri(ndb.Model):
         Initializes an instance of DetinationIri for the purposes of operating on the datastore
 
         Args:
-            iri:
+            iri (unicode): unicode representation of an (I)nternational(R)esource(I)dentifier.
+               string must contain only valid iri characters
 
         Returns:
 
         """
-        # normalize url
-        normal = cls.normalize_iri(iri)
-
         # construct a key for the kind in the hierarchy which corresponds to url
-        kee = cls._construct_key(normal)
+        kee = cls.construct_key(iri)
 
         # construct a model
         di = DestinationIri(key=kee)
@@ -76,13 +74,13 @@ class DestinationIri(ndb.Model):
         Initializes an instance of DetinationIri for the purposes of operating on the datastore
 
         Args:
-            iri:
+            iri (unicode): unicode representation of an (I)nternational(R)esource(I)dentifier.
+               string must contain only valid iri characters
 
         Returns:
 
         """
-        normal = cls.normalize_iri(iri)
-        return cls._construct_key(normal).get()
+        return cls.construct_key(iri).get()
 
     @classmethod
     def normalize_iri(cls, val):
@@ -104,7 +102,7 @@ class DestinationIri(ndb.Model):
         includes checks for neither white space nor valid characters
 
         Args:
-            val (str): string representation of an (I)nternational(R)esource(I)dentifier.
+            val (unicode): unicode representation of an (I)nternational(R)esource(I)dentifier.
                string must contain only valid iri characters
 
         Returns:
@@ -178,19 +176,19 @@ class DestinationIri(ndb.Model):
             yield query_seg
 
     @classmethod
-    def _construct_key(cls, normalized_iri):
+    def construct_key(cls, iri):
         """
         Returns ndb key which describes a path to a DestinationIri in the iri 'space' hierarchy.
         The last path segment of the returned key is always of kind cls.__name__ (i.e. DestinationIri)
 
         Args:
-            normalized_iri(NormalizedIri): a parsed representation of the original iri
-               which contains normalized components of an original iri
+            iri(unicode): a unicode representation of an (I)nternational(R)esource(I)dentifier
 
         Returns:
             ndb.Key:
 
         """
+        normalized_iri = cls.normalize_iri(iri)
         path = [arg for arg in cls._hierarchy_path(normalized_iri)]
         path[-2] = cls.__name__
 

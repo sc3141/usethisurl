@@ -1,14 +1,15 @@
 import logging
 import os
+import httplib
 
 import webapp2
 
 from google.appengine.ext import deferred
 from google.appengine.api import users
 
+from service.app import in_maintenance
 from service.schema import update_message
 from versions import gigondas
-
 
 def restrict_access(vers):
     problem = ''
@@ -26,6 +27,10 @@ def restrict_access(vers):
 
 class UpdateHandler(webapp2.RequestHandler):
     def get(self, **kwargs):
+        if not in_maintenance():
+            self.response.set_status(httplib.NOT_FOUND, 'The service is not in maintenance mode')
+            return
+
         task=None
         vers = kwargs.get('vers', '???')
         if vers == 'gigondas':

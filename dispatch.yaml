@@ -3,6 +3,6 @@ dispatch:
   - url: "yytakehome.appspot.com/"
     module: default
 
-  # Send all mobile traffic to the mobile frontend.
+  # Send all ui traffic to the ui frontend.
   - url: "ui.yytakehome.appspot.com/"
     module: ui
